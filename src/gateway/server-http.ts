@@ -30,6 +30,7 @@ import {
   normalizePluginNodeCapabilityScopedUrl,
   type PluginNodeCapabilitySurface,
 } from "./plugin-node-capability.js";
+import { handlePtyUpgrade } from "./server-pty.js";
 import type { HooksRequestHandler } from "./server/hooks-request-handler.js";
 import {
   isProtectedPluginRoutePathFromContext,
@@ -856,6 +857,18 @@ export function attachGatewayUpgradeHandler(opts: {
       }
       const resolvedAuth = getResolvedAuth();
       const requestPath = scopedNodeCapability.pathname;
+      // PTY bridge for TUI mode: /tui/pty
+      if (requestPath === "/tui/pty") {
+        const handled = await handlePtyUpgrade({
+          req,
+          socket,
+          head,
+          wss,
+          resolvedAuth,
+          log,
+        });
+        if (handled) return;
+      }
       const pathContext = resolvePluginRoutePathContext(requestPath);
       const nodeCapability = resolvePluginNodeCapabilityRoute?.(pathContext);
       if (nodeCapability) {

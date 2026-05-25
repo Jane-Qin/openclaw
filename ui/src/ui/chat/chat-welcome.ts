@@ -1,5 +1,6 @@
 import { html } from "lit";
 import { t } from "../../i18n/index.ts";
+import { renderDataworksWelcomeBadge } from "../dataworks-branding.ts";
 import {
   agentLogoUrl,
   assistantAvatarFallbackUrl,
@@ -68,6 +69,7 @@ export function renderWelcomeState(props: ChatWelcomeProps) {
         <span class="agent-chat__badge"
           ><img src=${logoUrl} alt="" /> ${t("chat.welcome.ready")}</span
         >
+        ${renderDataworksWelcomeBadge()}
       </div>
       <p class="agent-chat__hint">
         ${t("chat.welcome.hintBeforeShortcut")} <kbd>/</kbd>

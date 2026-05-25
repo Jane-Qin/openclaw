@@ -1676,6 +1676,12 @@
   object-fit: contain;
 }
 
+.agent-chat__badge--dataworks {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
 .agent-chat__hint {
   font-size: 13px;
   color: var(--muted);

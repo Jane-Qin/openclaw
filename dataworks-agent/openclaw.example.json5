@@ -1,0 +1,146 @@
+// DataWorks Agent · OpenClaw Gateway 配置样例
+//
+// 用法：
+//   1. 拷贝到 ~/.openclaw/openclaw.json（或合并进现有配置）
+//   2. 用环境变量注入 PLATFORM_OPENAI_KEY、GATEWAY_TOKEN（勿提交密钥）
+//   3. pnpm openclaw gateway
+//   4. Control UI：/chat（Chat）、/cli（CLI，待实现）；开发时 pnpm ui:dev
+//
+// 完整字段参考：
+//   https://docs.openclaw.ai/gateway/configuration-reference
+//   https://docs.openclaw.ai/gateway/sandbox-vs-tool-policy-vs-elevated
+
+{
+  // ============================================================
+  // 1. Gateway 服务配置
+  // ============================================================
+  gateway: {
+    port: 18789,
+    bind: "127.0.0.1",      // MVP 只本地访问；生产改 "0.0.0.0" + 反代
+    auth: {
+      mode: "token",
+      token: "${GATEWAY_TOKEN}",
+    },
+
+    // 嵌入数据中台需要：把 Control UI 挂到 /openclaw 路径，方便宿主反代
+    controlUi: {
+      basePath: "/openclaw",
+      allowedOrigins: [
+        // 数据中台域名（替换为实际值）
+        "https://your-dataworks-domain.example.com",
+        // 本地开发
+        "http://localhost:3000",
+      ],
+      // MVP：允许 loopback http；正式版走 wss/https
+      allowInsecureAuth: true,
+    },
+
+    // P0 暂不开 OpenAI 兼容 HTTP；只走 WebSocket
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: false },
+      },
+    },
+  },
+
+  // ============================================================
+  // 2. 模型 Provider 配置（平台统一 Key）
+  // ============================================================
+  models: {
+    providers: {
+      // 主 provider：按平台实际接的模型改
+      openai: {
+        apiKey: "${PLATFORM_OPENAI_KEY}",
+      },
+
+      // 如果还要接别的，平铺加即可
+      // anthropic: { apiKey: "${PLATFORM_ANTHROPIC_KEY}" },
+      // qwen: { apiKey: "${PLATFORM_QWEN_KEY}" },
+    },
+  },
+
+  // ============================================================
+  // 3. Agent 配置（默认 agent，MVP 不做多 agent 切换）
+  // ============================================================
+  agents: {
+    defaults: {
+      model: {
+        primary: "openai/gpt-5.5",
+        // 备用模型（可选）
+        // fallbacks: ["openai/gpt-5.4"],
+      },
+      workspace: "~/.openclaw/workspace-dataworks",
+
+      // MVP：允许的模型清单（限制用户在 /model 里能切的范围）
+      models: {
+        "openai/gpt-5.5": { alias: "GPT-5.5" },
+        "openai/gpt-5.4": { alias: "GPT-5.4" },
+      },
+
+      // MVP 不开沙箱（要开的话改 "non-main" 或 "all"）
+      sandbox: { mode: "off" },
+    },
+
+    list: [
+      {
+        id: "main",
+        default: true,
+        // system prompt 默认走 OpenClaw 内置；正式版替换为 DataWorks 业务 prompt
+      },
+      // P1 加更多 agent 时在此追加
+    ],
+  },
+
+  // ============================================================
+  // 4. 工具策略（核心：默认全关外部工具）
+  // ============================================================
+  tools: {
+    // P0：用 deny 列表挡掉所有可能联网/执行的工具
+    deny: [
+      "group:runtime",        // exec、process、code_execution
+      "group:web",            // web_search、web_fetch
+      "group:ui",             // browser、canvas
+      "group:plugins",        // 所有 plugin 工具（含 MCP）
+      "group:messaging",      // message（频道消息）
+      "group:nodes",          // 节点工具
+      "group:automation",     // cron、gateway、heartbeat_respond
+      "exec",
+      "browser",
+    ],
+
+    // elevated 必须关闭（防止 /elevated 绕过沙箱执行 host 命令）
+    elevated: {
+      enabled: false,
+    },
+  },
+
+  // ============================================================
+  // 5. 会话管理（OpenClaw 自带 sessions.json 文件存储）
+  // ============================================================
+  session: {
+    dmScope: "main",          // 单会话 scope；多客户场景再改
+    reset: {
+      // MVP：不自动 reset，由用户手动 /new 或 /reset
+      mode: "manual",
+    },
+  },
+
+  // ============================================================
+  // 6. 渠道/插件全关
+  // ============================================================
+  channels: {
+    // MVP 不接任何外部 IM
+  },
+
+  plugins: {
+    // MVP 不启用任何插件（包括 MCP）
+    enabled: false,
+  },
+
+  // ============================================================
+  // 7. 日志与诊断（开发调试）
+  // ============================================================
+  logging: {
+    level: "info",
+  },
+}

@@ -167,6 +167,7 @@ import {
   sortLocaleStrings,
 } from "./views/agents-utils.ts";
 import { renderChat } from "./views/chat.ts";
+import { renderCli } from "./views/cli.ts";
 import { renderCommandPalette } from "./views/command-palette.ts";
 import { getPresetById } from "./views/config-presets.ts";
 import { renderQuickSettings, type QuickSettingsChannel } from "./views/config-quick.ts";
@@ -909,7 +910,7 @@ export function renderApp(state: AppViewState) {
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
   const chatDisabledReason = state.connected ? null : t("chat.disconnected");
-  const isChat = state.tab === "chat";
+  const isChat = state.tab === "chat" || state.tab === "cli";
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
   const navDrawerOpen = state.navDrawerOpen && !chatFocus && !state.onboarding;
   const navCollapsed = state.settings.navCollapsed && !navDrawerOpen;
@@ -2830,6 +2831,14 @@ export function renderApp(state: AppViewState) {
                   basePath: state.basePath ?? "",
                 }),
             )
+          : nothing}
+        ${state.tab === "cli"
+          ? renderCli({
+              sessionKey: state.sessionKey,
+              gatewayUrl: state.settings.gatewayUrl,
+              token: state.settings.token,
+              basePath: state.basePath ?? "",
+            })
           : nothing}
         ${isSettingsTab(state.tab) && state.tab !== "debug" && state.tab !== "logs"
           ? renderSettingsWorkspace(state, renderConfigTabForActiveTab())
