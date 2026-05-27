@@ -14,6 +14,7 @@ import {
   renderChatControls,
   renderChatMobileToggle,
   renderChatSessionSelect,
+  renderChatTuiToggle,
   renderTab,
   resolveAssistantAttachmentAuthToken,
   resolveDashboardHeaderContext,
@@ -22,10 +23,22 @@ import {
   createChatSession,
   dismissChatError,
   switchChatSession,
+  resolveSidebarChatSessionKey,
+  resolveSessionOptionGroups,
+  resolveChatAgentSessionGroups,
 } from "./app-render.helpers.ts";
 import { warnQueryToken } from "./app-settings.ts";
 import type { AppViewState } from "./app-view-state.ts";
+import { resolveControlUiAuthToken } from "./control-ui-auth.ts";
+import { renderChatAgentComposeExtras } from "./chatagent/compose-extras.ts";
+import {
+  renderChatAgentSessionLiveIndicator,
+  renderChatAgentSessionStatusDot,
+} from "./chatagent/session-status-dot.ts";
+import { filterChatAgentSessionGroups } from "./chatagent/sessions-panel.ts";
 import { reconcileChatRunLifecycle } from "./chat/run-lifecycle.ts";
+import { renderChatModelSelect } from "./chat/session-controls.ts";
+import { exportChatMarkdown } from "./chat/export.ts";
 import {
   controlUiNowMs,
   recordControlUiRenderTiming,
@@ -111,6 +124,7 @@ import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import {
   branchSessionFromCheckpoint,
+  CHAT_SESSIONS_LOAD_OVERRIDES,
   deleteSessionsAndRefresh,
   loadSessions,
   patchSession,
@@ -261,6 +275,427 @@ function resolveSidebarRecentSessions(state: AppViewState): GatewaySessionRow[] 
     )
     .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
     .slice(0, 5);
+}
+
+function resolveCliRenderProps(state: AppViewState) {
+  return {
+    sessionKey: state.sessionKey,
+    gatewayUrl: state.settings.gatewayUrl,
+    token:
+      resolveControlUiAuthToken({
+        hello: state.hello,
+        settings: state.settings,
+        password: state.password,
+      }) ?? "",
+    basePath: state.basePath ?? "",
+  };
+}
+
+function renderChatAgentPage(state: AppViewState) {
+  const showTui = state.chatAgentViewMode === "tui";
+  const version = state.hello?.server?.version ?? "";
+  const activeSessionRow = state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey);
+  const sessionLabel = resolveSessionDisplayName(state.sessionKey, activeSessionRow);
+  const chatDisabledReason = state.connected ? null : t("chat.disconnected");
+  const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
+  const showToolCalls = state.onboarding ? true : state.settings.chatShowToolCalls;
+  const chatFocus = state.settings.chatFocusMode || state.onboarding;
+  const localAssistantAvatarOverride =
+    normalizeOptionalString(loadLocalAssistantIdentity().avatar) ?? null;
+  const assistantAvatarUrl = resolveAssistantAvatarUrl(state);
+  const chatAssistantAvatarStatus = localAssistantAvatarOverride
+    ? "data"
+    : (state.chatAvatarStatus ?? state.assistantAvatarStatus ?? null);
+  const chatAssistantAvatarMissing =
+    chatAssistantAvatarStatus === "none" && state.chatAvatarReason === "missing";
+  const chatAvatarUrl =
+    localAssistantAvatarOverride ??
+    state.chatAvatarUrl ??
+    (chatAssistantAvatarMissing ? null : (assistantAvatarUrl ?? null));
+  const sessionsDrawerOpen = state.navDrawerOpen;
+  // Match /chat: mobile drawer open always shows the full sessions panel.
+  const sessionsCollapsed = state.chatAgentSessionsCollapsed && !sessionsDrawerOpen;
+
+  return html`
+    <div
+      class="shell shell--chatagent ${sessionsCollapsed ? "shell--chatagent-collapsed" : ""} ${sessionsDrawerOpen
+        ? "shell--chatagent-drawer-open"
+        : ""}"
+    >
+      <button
+        type="button"
+        class="shell-nav-backdrop"
+        aria-label=${t("nav.collapse")}
+        @click=${() => {
+          state.navDrawerOpen = false;
+        }}
+      ></button>
+      <aside class="chatagent-sessions ${sessionsCollapsed ? "chatagent-sessions--collapsed" : ""}">
+        <div class="chatagent-sessions__header">
+          ${sessionsCollapsed
+            ? nothing
+            : html`
+                <div class="chatagent-sessions__brand-row">
+                  <span class="chatagent-sessions__brand">OpenClaw</span>
+                  ${version
+                    ? html`<span class="chatagent-sessions__version">v${version}</span>`
+                    : nothing}
+                </div>
+              `}
+          <button
+            type="button"
+            class="nav-collapse-toggle"
+            title=${sessionsCollapsed ? t("nav.expand") : t("nav.collapse")}
+            aria-label=${sessionsCollapsed ? t("nav.expand") : t("nav.collapse")}
+            @click=${() => {
+              state.chatAgentSessionsCollapsed = !sessionsCollapsed;
+              if (!sessionsCollapsed) {
+                state.chatAgentSessionMenuKey = null;
+              }
+            }}
+          >
+            <span class="nav-collapse-toggle__icon" aria-hidden="true"
+              >${sessionsCollapsed ? icons.panelLeftOpen : icons.panelLeftClose}</span
+            >
+          </button>
+        </div>
+        <button
+          type="button"
+          class="sidebar-new-session"
+          title=${t("chat.runControls.newSession")}
+          aria-label=${t("chat.runControls.newSession")}
+          ?disabled=${!state.connected || state.sessionsLoading || !state.client}
+          @click=${async () => {
+            if (await createChatSession(state)) {
+              state.chatAgentViewMode = "chat";
+            }
+          }}
+        >
+          <span class="sidebar-new-session__icon" aria-hidden="true">${icons.plus}</span>
+          ${sessionsCollapsed
+            ? nothing
+            : html`<span class="sidebar-new-session__label">${t("chat.runControls.newSession")}</span>`}
+        </button>
+        ${sessionsCollapsed
+          ? nothing
+          : html`
+              <label class="chatagent-sessions__search field">
+                <input
+                  type="search"
+                  class="chatagent-sessions__search-input"
+                  placeholder=${t("chatagent.sessions.searchPlaceholder")}
+                  aria-label=${t("chatagent.sessions.searchPlaceholder")}
+                  .value=${state.chatAgentSessionSearch}
+                  @input=${(event: Event) => {
+                    state.chatAgentSessionSearch = (event.target as HTMLInputElement).value;
+                  }}
+                />
+              </label>
+            `}
+        <div class="chatagent-sessions__list">
+          ${sessionsCollapsed ? nothing : renderChatAgentSessionGroups(state)}
+        </div>
+        <div class="chatagent-sessions__footer sidebar-utility-group">
+          ${renderTab(state, "config", { collapsed: sessionsCollapsed })}
+        </div>
+      </aside>
+      <div class="chatagent-main">
+        <header class="chatagent-header">
+          <div class="chatagent-header__start">
+            <button
+              type="button"
+              class="sidebar-menu-trigger topbar-nav-toggle"
+              title=${sessionsDrawerOpen ? t("nav.collapse") : t("nav.expand")}
+              aria-label=${sessionsDrawerOpen ? t("nav.collapse") : t("nav.expand")}
+              aria-expanded=${sessionsDrawerOpen}
+              @click=${() => {
+                state.navDrawerOpen = !sessionsDrawerOpen;
+              }}
+            >
+              <span class="nav-collapse-toggle__icon" aria-hidden="true">${icons.menu}</span>
+            </button>
+            <h1 class="chatagent-header__title">${sessionLabel}</h1>
+          </div>
+          <div class="chatagent-header__actions">
+            <button
+              type="button"
+              class="btn btn--subtle btn--sm"
+              ?disabled=${!state.chatMessages?.length}
+              title=${t("chat.runControls.export")}
+              @click=${() => {
+                exportChatMarkdown(state.chatMessages, state.assistantName);
+              }}
+            >
+              ${icons.download} ${t("chat.runControls.export")}
+            </button>
+            <div class="chat-tui-toggle" role="radiogroup" aria-label="View mode">
+              <button
+                class="chat-tui-toggle__btn ${!showTui ? "chat-tui-toggle__btn--active" : ""}"
+                role="radio"
+                aria-checked=${!showTui}
+                ?disabled=${!showTui ? true : undefined}
+                @click=${() => { state.chatAgentViewMode = "chat"; }}
+                title="Chat view"
+              >
+                ${icons.messageSquare}
+                <span class="chat-tui-toggle__label">Chat</span>
+              </button>
+              <button
+                class="chat-tui-toggle__btn ${showTui ? "chat-tui-toggle__btn--active" : ""}"
+                role="radio"
+                aria-checked=${showTui}
+                ?disabled=${showTui ? true : undefined}
+                @click=${() => { state.chatAgentViewMode = "tui"; }}
+                title="TUI view"
+              >
+                ${icons.terminal}
+                <span class="chat-tui-toggle__label">TUI</span>
+              </button>
+            </div>
+          </div>
+        </header>
+        <section class="chatagent-body">
+          ${showTui
+            ? renderCli(resolveCliRenderProps(state))
+            : renderChat({
+                sessionKey: state.sessionKey,
+                layoutVariant: "chatagent",
+                composeModelSelect: renderChatModelSelect(state),
+                composeToolbarExtras: renderChatAgentComposeExtras({
+                  compactBusy:
+                    state.compactionStatus?.phase === "active" ||
+                    state.compactionStatus?.phase === "retrying",
+                  compactDisabled:
+                    !state.connected ||
+                    Boolean(state.chatRunId) ||
+                    state.chatStream !== null ||
+                    state.chatSending,
+                  onCompact: () => state.handleSendChat("/compact", { restoreDraft: true }),
+                }),
+                onSessionKeyChange: (next) => {
+                  switchChatSession(state, next);
+                },
+                thinkingLevel: state.chatThinkingLevel,
+                showThinking,
+                showToolCalls,
+                loading: state.chatLoading,
+                sending: state.chatSending,
+                compactionStatus: state.compactionStatus,
+                fallbackStatus: state.fallbackStatus,
+                assistantAvatarUrl: chatAvatarUrl,
+                messages: state.chatMessages,
+                sideResult: state.chatSideResult,
+                toolMessages: state.chatToolMessages,
+                streamSegments: state.chatStreamSegments,
+                stream: state.chatStream,
+                streamStartedAt: state.chatStreamStartedAt,
+                draft: state.chatMessage,
+                queue: state.chatQueue,
+                realtimeTalkActive: state.realtimeTalkActive,
+                realtimeTalkStatus: state.realtimeTalkStatus,
+                realtimeTalkDetail: state.realtimeTalkDetail,
+                realtimeTalkTranscript: state.realtimeTalkTranscript,
+                realtimeTalkOptionsOpen: state.realtimeTalkOptionsOpen,
+                realtimeTalkOptions: state.realtimeTalkOptions,
+                connected: state.connected,
+                canSend: state.connected,
+                disabledReason: chatDisabledReason,
+                error: state.lastError,
+                runStatus: state.chatRunStatus,
+                onDismissError: () => dismissChatError(state),
+                sessions: state.sessionsResult,
+                focusMode: chatFocus,
+                autoExpandToolCalls: false,
+                onRefresh: () => {
+                  state.chatSideResult = null;
+                  state.resetToolStream();
+                  return refreshChat(state, { awaitHistory: true, scheduleScroll: false });
+                },
+                onToggleFocusMode: () => {
+                  if (state.onboarding) {
+                    return;
+                  }
+                  state.applySettings({ ...state.settings, chatFocusMode: !state.settings.chatFocusMode });
+                },
+                onChatScroll: (event) => state.handleChatScroll(event),
+                getDraft: () => state.chatMessage,
+                onDraftChange: (next) => state.handleChatDraftChange(next),
+                attachments: state.chatAttachments,
+                onAttachmentsChange: (next) => (state.chatAttachments = next),
+                onSend: () => state.handleSendChat(),
+                onCompact: () => state.handleSendChat("/compact", { restoreDraft: true }),
+                canAbort: hasAbortableSessionRun(state),
+                onAbort: () => void state.handleAbortChat({ preserveDraft: true }),
+                onQueueRemove: (id) => state.removeQueuedMessage(id),
+                onQueueSteer: (id) => void state.steerQueuedChatMessage(id),
+                onDismissSideResult: () => {
+                  state.chatSideResult = null;
+                },
+                onNewSession: () => void createChatSession(state),
+                agentsList: state.agentsList,
+                currentAgentId:
+                  resolveAgentIdFromSessionKey(state.sessionKey) ??
+                  state.agentsList?.defaultId ??
+                  "main",
+                onAgentChange: (agentId: string) => {
+                  switchChatSession(state, buildAgentMainSessionKey({ agentId }));
+                },
+                onSessionSelect: (key: string) => {
+                  switchChatSession(state, key);
+                },
+                sidebarOpen: state.sidebarOpen,
+                sidebarContent: state.sidebarContent,
+                sidebarError: state.sidebarError,
+                splitRatio: state.splitRatio,
+                onOpenSidebar: (content) => state.handleOpenSidebar(content),
+                onCloseSidebar: () => state.handleCloseSidebar(),
+                onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
+                assistantName: state.assistantName,
+                assistantAvatar: state.assistantAvatar,
+                userName: state.userName ?? null,
+                userAvatar: state.userAvatar ?? null,
+                localMediaPreviewRoots: state.localMediaPreviewRoots,
+                embedSandboxMode: state.embedSandboxMode,
+                allowExternalEmbedUrls: state.allowExternalEmbedUrls,
+                assistantAttachmentAuthToken: resolveAssistantAttachmentAuthToken(state),
+                basePath: state.basePath ?? "",
+              })}
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function renderChatAgentSessionGroups(state: AppViewState) {
+  const groups = filterChatAgentSessionGroups(
+    resolveChatAgentSessionGroups(state, state.sessionsResult, state.sessionKey),
+    state.chatAgentSessionSearch,
+  );
+  if (groups.length === 0) {
+    const emptyLabel = state.chatAgentSessionSearch.trim()
+      ? t("chatagent.sessions.noResults")
+      : t("chatagent.sessions.empty");
+    return html`<div class="chatagent-sessions__empty">${emptyLabel}</div>`;
+  }
+  return groups.map((group) => html`
+    <div class="chatagent-session-group">
+      <div class="chatagent-session-group__label">${group.label}</div>
+      ${group.options.map((option) => {
+        const active = option.key === state.sessionKey;
+        const menuOpen = state.chatAgentSessionMenuKey === option.key;
+        const row = state.sessionsResult?.sessions?.find((entry) => entry.key === option.key);
+        return html`
+          <div
+            class="chatagent-session-item ${active ? "chatagent-session-item--active" : ""} ${menuOpen
+              ? "chatagent-session-item--menu-open"
+              : ""}"
+          >
+            <div class="chatagent-session-item__row">
+              <a
+                href=${`${pathForTab("chatagent", state.basePath)}?session=${encodeURIComponent(option.key)}`}
+                class="chatagent-session-item__link"
+                title=${option.label}
+                @click=${(event: MouseEvent) => {
+                  if (
+                    event.defaultPrevented ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  state.chatAgentSessionMenuKey = null;
+                  state.navDrawerOpen = false;
+                  if (option.key !== state.sessionKey) {
+                    switchChatSession(state, option.key);
+                  }
+                }}
+              >
+                ${renderChatAgentSessionStatusDot({ active })}
+                <span class="chatagent-session-item__name">${option.label}</span>
+              </a>
+              <div class="chatagent-session-item__actions">
+                ${renderChatAgentSessionLiveIndicator(row)}
+                <div class="chatagent-session-item__menu-wrap">
+                  <button
+                    type="button"
+                    class="chatagent-session-item__menu-trigger"
+                    title=${t("chatagent.sessions.actions")}
+                    aria-label=${t("chatagent.sessions.actions")}
+                    aria-expanded=${menuOpen ? "true" : "false"}
+                    @click=${(event: Event) => {
+                      event.stopPropagation();
+                      state.chatAgentSessionMenuKey = menuOpen ? null : option.key;
+                    }}
+                  >
+                    ${icons.moreHorizontal}
+                  </button>
+                  ${menuOpen
+                    ? html`
+                        <div class="chatagent-session-item__menu" role="menu">
+                          <button
+                            type="button"
+                            class="chatagent-session-item__menu-item"
+                            role="menuitem"
+                            @click=${() => {
+                              state.chatAgentSessionMenuKey = null;
+                              const newLabel = window.prompt(
+                                t("chatagent.sessions.renamePrompt"),
+                                option.label,
+                              );
+                              if (newLabel && newLabel.trim()) {
+                                void patchSession(
+                                  state,
+                                  option.key,
+                                  { label: newLabel.trim() },
+                                  CHAT_SESSIONS_LOAD_OVERRIDES,
+                                );
+                              }
+                            }}
+                          >
+                            ${t("chatagent.sessions.rename")}
+                          </button>
+                          <button
+                            type="button"
+                            class="chatagent-session-item__menu-item chatagent-session-item__menu-item--danger"
+                            role="menuitem"
+                            @click=${() => {
+                              state.chatAgentSessionMenuKey = null;
+                              const confirmed = window.confirm(
+                                t("chatagent.sessions.deleteConfirm", { name: option.label }),
+                              );
+                              if (!confirmed) {
+                                return;
+                              }
+                              void deleteSessionsAndRefresh(state, [option.key], {
+                                skipConfirm: true,
+                                refreshOverrides: CHAT_SESSIONS_LOAD_OVERRIDES,
+                              }).then((deleted) => {
+                                if (deleted.includes(option.key) && option.key === state.sessionKey) {
+                                  const mainKey = resolveSidebarChatSessionKey(state);
+                                  if (mainKey) {
+                                    switchChatSession(state, mainKey);
+                                  }
+                                }
+                              });
+                            }}
+                          >
+                            ${t("chatagent.sessions.delete")}
+                          </button>
+                        </div>
+                      `
+                    : nothing}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      })}
+    </div>
+  `);
 }
 
 function renderSidebarSessions(state: AppViewState) {
@@ -906,11 +1341,18 @@ export function renderApp(state: AppViewState) {
     return html` ${renderLoginGate(state)} ${renderGatewayUrlConfirmation(state)} `;
   }
 
+  const chatDisabledReason = state.connected ? null : t("chat.disconnected");
+  const isChat = state.tab === "chat" || state.tab === "cli";
+  const isChatAgent = state.tab === "chatagent";
+
+  // ChatAgent page: fully custom shell, bypasses sidebar + content-header layout.
+  if (isChatAgent) {
+    return renderChatAgentPage(state);
+  }
+
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
-  const chatDisabledReason = state.connected ? null : t("chat.disconnected");
-  const isChat = state.tab === "chat" || state.tab === "cli";
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
   const navDrawerOpen = state.navDrawerOpen && !chatFocus && !state.onboarding;
   const navCollapsed = state.settings.navCollapsed && !navDrawerOpen;
@@ -1309,14 +1751,20 @@ export function renderApp(state: AppViewState) {
               state.setTab("aiAgents");
             },
             onThinkingChange: (level) => {
-              void patchSession(state, state.sessionKey, { thinkingLevel: level }).then(() =>
-                requestHostUpdate?.(),
-              );
+              void patchSession(
+                state,
+                state.sessionKey,
+                { thinkingLevel: level },
+                CHAT_SESSIONS_LOAD_OVERRIDES,
+              ).then(() => requestHostUpdate?.());
             },
             onFastModeToggle: () => {
-              void patchSession(state, state.sessionKey, { fastMode: !fastMode }).then(() =>
-                requestHostUpdate?.(),
-              );
+              void patchSession(
+                state,
+                state.sessionKey,
+                { fastMode: !fastMode },
+                CHAT_SESSIONS_LOAD_OVERRIDES,
+              ).then(() => requestHostUpdate?.());
             },
             channels: extractQuickSettingsChannels(state),
             onChannelConfigure: () => {
@@ -1916,7 +2364,8 @@ export function renderApp(state: AppViewState) {
                 ${state.lastError
                   ? html`<div class="pill danger">${state.lastError}</div>`
                   : nothing}
-                ${isChat ? renderChatControls(state) : nothing}
+                ${isChat ? renderChatTuiToggle(state) : nothing}
+                ${state.tab === "chat" ? renderChatControls(state) : nothing}
               </div>
             </section>`}
         ${state.tab === "overview"
@@ -2833,12 +3282,7 @@ export function renderApp(state: AppViewState) {
             )
           : nothing}
         ${state.tab === "cli"
-          ? renderCli({
-              sessionKey: state.sessionKey,
-              gatewayUrl: state.settings.gatewayUrl,
-              token: state.settings.token,
-              basePath: state.basePath ?? "",
-            })
+          ? renderCli(resolveCliRenderProps(state))
           : nothing}
         ${isSettingsTab(state.tab) && state.tab !== "debug" && state.tab !== "logs"
           ? renderSettingsWorkspace(state, renderConfigTabForActiveTab())

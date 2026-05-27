@@ -1066,6 +1066,26 @@ export const zh_CN: TranslationMap = {
       thinkingLevel: "聊天思考级别",
     },
   },
+  chatagent: {
+    sessions: {
+      empty: "暂无会话",
+      noResults: "没有匹配的会话",
+      searchPlaceholder: "搜索会话",
+      actions: "会话操作",
+      rename: "重命名",
+      renamePrompt: "重命名会话",
+      delete: "删除",
+      deleteConfirm: "确定删除会话「{name}」吗？\n\n将归档其对话记录。",
+    },
+    composer: {
+      attach: "附加文件",
+    },
+    composeMenu: {
+      title: "上下文管理",
+      hint: "合理管理，节省您的 Credits",
+      compact: "压缩当前会话",
+    },
+  },
   languages: {
     en: "英语",
     zhCN: "简体中文 (简体中文)",

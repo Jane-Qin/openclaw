@@ -33,6 +33,7 @@ export type Tab =
   | "automation"
   | "infrastructure"
   | "aiAgents"
+  | "chatagent"
   | "debug"
   | "logs"
   | "dreams";
@@ -61,6 +62,7 @@ const TAB_PATHS: Record<Tab, string> = {
   nodes: "/nodes",
   chat: "/chat",
   cli: "/cli",
+  chatagent: "/chatagent",
   config: "/config",
   communications: "/communications",
   appearance: "/appearance",
@@ -177,6 +179,8 @@ export function iconForTab(tab: Tab): IconName {
       return "folder";
     case "chat":
       return "messageSquare";
+    case "chatagent":
+      return "messageSquare";
     case "cli":
       return "terminal";
     case "overview":
@@ -216,6 +220,10 @@ export function iconForTab(tab: Tab): IconName {
     default:
       return "folder";
   }
+}
+
+export function isChatSurfaceTab(tab: Tab): boolean {
+  return tab === "chat" || tab === "cli" || tab === "chatagent";
 }
 
 export function titleForTab(tab: Tab) {

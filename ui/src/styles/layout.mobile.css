@@ -307,6 +307,102 @@
   .shell--nav-collapsed:not(.shell--nav-drawer-open) .sidebar-mode-switch {
     display: none;
   }
+
+  /* ChatAgent: slide-over sessions drawer (same breakpoint as /chat). */
+  .shell--chatagent,
+  .shell--chatagent.shell--chatagent-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "main";
+  }
+
+  .shell--chatagent .chatagent-main {
+    grid-area: main;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .shell--chatagent .chatagent-sessions {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 70;
+    width: min(86vw, 320px);
+    min-width: 0;
+    border-right: none;
+    background: color-mix(in srgb, var(--bg) 96%, var(--bg-elevated) 4%);
+    box-shadow: 0 30px 80px color-mix(in srgb, black 40%, transparent);
+    transform: translateX(-100%);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform var(--shell-focus-duration) var(--shell-focus-ease),
+      visibility 0s linear var(--shell-focus-duration);
+  }
+
+  :root[data-theme-mode="light"] .shell--chatagent .chatagent-sessions {
+    background: color-mix(in srgb, var(--panel) 98%, white 2%);
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .chatagent-sessions {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      transform var(--shell-focus-duration) var(--shell-focus-ease),
+      visibility 0s;
+  }
+
+  .shell--chatagent .shell-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    border: 0;
+    background: color-mix(in srgb, black 52%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--shell-focus-duration) var(--shell-focus-ease);
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .shell-nav-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .shell--chatagent .topbar-nav-toggle {
+    display: inline-flex;
+  }
+
+  .shell--chatagent .chatagent-sessions__header .nav-collapse-toggle {
+    display: none;
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .chatagent-sessions--collapsed .chatagent-sessions__brand-row {
+    display: flex;
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .chatagent-sessions--collapsed .chatagent-sessions__search {
+    display: block;
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .chatagent-sessions--collapsed .chatagent-sessions__list {
+    display: block;
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .chatagent-sessions--collapsed .sidebar-new-session__label {
+    display: inline;
+  }
+
+  .shell--chatagent.shell--chatagent-drawer-open .chatagent-sessions--collapsed .sidebar-new-session {
+    width: calc(100% - 24px);
+    min-height: 38px;
+    margin: 0 12px 10px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+  }
 }
 
 /* Mobile-specific styles */

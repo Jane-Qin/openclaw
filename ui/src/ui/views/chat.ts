@@ -169,6 +169,9 @@ export type ChatProps = {
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
   basePath?: string;
+  layoutVariant?: "default" | "chatagent";
+  composeModelSelect?: TemplateResult;
+  composeToolbarExtras?: TemplateResult;
 };
 
 const pinnedMessagesMap = new Map<string, PinnedMessages>();
@@ -1324,10 +1327,14 @@ export function renderChat(props: ChatProps) {
   const slashMenuVisible = isSlashMenuVisible();
   const activeSlashMenuOptionId = getActiveSlashMenuOptionId();
   const activeSlashMenuOptionLabel = getActiveSlashMenuOptionLabel();
+  const isChatAgentLayout = props.layoutVariant === "chatagent";
+  const attachLabel = isChatAgentLayout
+    ? t("chatagent.composer.attach")
+    : t("chat.composer.attachFile");
 
   return html`
     <section
-      class="card chat"
+      class="card chat ${isChatAgentLayout ? "chat--chatagent" : ""}"
       @drop=${(e: DragEvent) => handleDrop(e, props)}
       @dragover=${(e: DragEvent) => e.preventDefault()}
     >
@@ -1485,20 +1492,21 @@ export function renderChat(props: ChatProps) {
 
         <div class="agent-chat__toolbar">
           <div class="agent-chat__toolbar-left">
+            ${props.composeModelSelect ?? nothing}
             <button
               class="agent-chat__input-btn"
               @click=${() => {
                 document.querySelector<HTMLInputElement>(".agent-chat__file-input")?.click();
               }}
-              title=${t("chat.composer.attachFile")}
-              aria-label=${t("chat.composer.attachFile")}
+              title=${attachLabel}
+              aria-label=${attachLabel}
               ?disabled=${!props.connected}
             >
               ${icons.paperclip}
-              <span class="agent-chat__control-label">${t("chat.composer.attachFile")}</span>
+              <span class="agent-chat__control-label">${attachLabel}</span>
             </button>
 
-            ${props.onToggleRealtimeTalk
+            ${!isChatAgentLayout && props.onToggleRealtimeTalk
               ? html`
                   <button
                     class="agent-chat__input-btn ${props.realtimeTalkActive
@@ -1533,7 +1541,9 @@ export function renderChat(props: ChatProps) {
                   </button>
                 `
               : nothing}
-            ${tokens ? html`<span class="agent-chat__token-count">${tokens}</span>` : nothing}
+            ${!isChatAgentLayout && tokens
+              ? html`<span class="agent-chat__token-count">${tokens}</span>`
+              : nothing}
             ${renderChatRunStatusIndicator(composerRunStatus)}
           </div>
 
@@ -1549,6 +1559,9 @@ export function renderChat(props: ChatProps) {
             onNewSession: props.onNewSession,
             onSend: props.onSend,
             onStoreDraft: () => {},
+            hideExport: isChatAgentLayout,
+            hideNewSession: isChatAgentLayout,
+            leadingExtras: props.composeToolbarExtras,
           })}
         </div>
       </div>

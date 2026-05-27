@@ -18,6 +18,7 @@ import {
 import { startControlUiResponsivenessObserver } from "./control-ui-performance.ts";
 import { loadControlUiBootstrapConfig } from "./controllers/control-ui-bootstrap.ts";
 import type { Tab } from "./navigation.ts";
+import { isChatSurfaceTab } from "./navigation.js";
 
 type LifecycleHost = {
   basePath: string;
@@ -143,11 +144,11 @@ export function handleDisconnected(host: LifecycleHost) {
 }
 
 export function handleUpdated(host: LifecycleHost, changed: Map<PropertyKey, unknown>) {
-  if (host.tab === "chat" && host.chatManualRefreshInFlight) {
+  if (isChatSurfaceTab(host.tab) && host.chatManualRefreshInFlight) {
     return;
   }
   if (
-    host.tab === "chat" &&
+    isChatSurfaceTab(host.tab) &&
     (changed.has("chatMessages") ||
       changed.has("chatToolMessages") ||
       changed.has("chatStream") ||

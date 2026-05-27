@@ -423,6 +423,10 @@ export type AppViewState = {
     paletteQuery: string;
     paletteActiveIndex: number;
     streamMode: boolean;
+  chatAgentViewMode: "chat" | "tui";
+  chatAgentSessionsCollapsed: boolean;
+  chatAgentSessionSearch: string;
+  chatAgentSessionMenuKey: string | null;
     overviewShowGatewayToken: boolean;
     overviewShowGatewayPassword: boolean;
     overviewLogLines: string[];

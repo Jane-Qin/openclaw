@@ -350,7 +350,7 @@ describe("handleGatewayEvent sessions.changed", () => {
     expect(loadSessionsMock).toHaveBeenCalledWith(host);
   });
 
-  it("skips a delayed session reload after the user returns to chat", () => {
+  it("reloads chat sessions with chat filters after the user returns to chat", () => {
     vi.useFakeTimers();
     loadSessionsMock.mockReset();
     applySessionsChangedEventMock.mockReset().mockReturnValue({ applied: false });
@@ -365,7 +365,15 @@ describe("handleGatewayEvent sessions.changed", () => {
     host.tab = "chat";
     vi.advanceTimersByTime(5_000);
 
-    expect(loadSessionsMock).not.toHaveBeenCalled();
+    expect(loadSessionsMock).toHaveBeenCalledWith(
+      host,
+      expect.objectContaining({
+        activeMinutes: 0,
+        limit: 100,
+        includeGlobal: true,
+        includeUnknown: true,
+      }),
+    );
   });
 
   it("skips a delayed session reload after disconnect", () => {

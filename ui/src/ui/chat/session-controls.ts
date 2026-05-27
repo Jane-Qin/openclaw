@@ -1,7 +1,6 @@
 import { html } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { t } from "../../i18n/index.ts";
-import { CHAT_SESSIONS_ACTIVE_MINUTES, CHAT_SESSIONS_REFRESH_LIMIT } from "../app-chat.ts";
 import type { AppViewState } from "../app-view-state.ts";
 import { createChatModelOverride } from "../chat-model-ref.ts";
 import {
@@ -9,7 +8,7 @@ import {
   resolveChatModelSelectState,
 } from "../chat-model-select-state.ts";
 import { refreshVisibleToolsEffectiveForCurrentSession } from "../controllers/agents.ts";
-import { loadSessions } from "../controllers/sessions.ts";
+import { loadChatSurfaceSessions } from "../controllers/sessions.ts";
 import { isMonitoredAuthProvider } from "../model-auth-helpers.ts";
 import { pathForTab } from "../navigation.ts";
 import { collectQuotaWindowsFromAuthStatus, formatQuotaReset } from "../provider-quota-summary.ts";
@@ -196,20 +195,14 @@ function renderChatAgentSelect(
 }
 
 async function refreshSessionOptions(state: AppViewState) {
-  await loadSessions(state as unknown as Parameters<typeof loadSessions>[0], {
-    activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
-    limit: CHAT_SESSIONS_REFRESH_LIMIT,
-    includeGlobal: true,
-    includeUnknown: true,
-    showArchived: state.sessionsShowArchived,
-  });
+  await loadChatSurfaceSessions(state as unknown as Parameters<typeof loadChatSurfaceSessions>[0]);
 }
 
 async function refreshVisibleToolsEffectiveForCurrentSessionLazy(state: AppViewState) {
   return refreshVisibleToolsEffectiveForCurrentSession(state);
 }
 
-function renderChatModelSelect(state: AppViewState) {
+export function renderChatModelSelect(state: AppViewState) {
   const { currentOverride, defaultLabel, options } = resolveChatModelSelectState(state);
   const busy =
     state.chatLoading || state.chatSending || Boolean(state.chatRunId) || state.chatStream !== null;
@@ -733,6 +726,105 @@ export function resolveSessionOptionGroups(
   }
 
   return Array.from(groups.values());
+}
+
+/** Session groups for /chatagent sidebar — all agents visible, not scoped to active agent. */
+export function resolveChatAgentSessionGroups(
+  state: AppViewState,
+  sessions: SessionsListResult | null,
+  sessionKey = state.sessionKey,
+): SessionOptionGroup[] {
+  const rows = sessions?.sessions ?? [];
+  const hideCron = state.sessionsHideCron ?? true;
+  const byKey = new Map<string, SessionsListResult["sessions"][number]>();
+  for (const row of rows) {
+    byKey.set(row.key, row);
+  }
+
+  const seenKeys = new Set<string>();
+  const groups = new Map<string, SessionOptionGroup>();
+  const ensureGroup = (groupId: string, label: string): SessionOptionGroup => {
+    const existing = groups.get(groupId);
+    if (existing) {
+      return existing;
+    }
+    const created: SessionOptionGroup = {
+      id: groupId,
+      label,
+      options: [],
+    };
+    groups.set(groupId, created);
+    return created;
+  };
+
+  const addOption = (key: string) => {
+    if (!key || seenKeys.has(key)) {
+      return;
+    }
+    seenKeys.add(key);
+    const row = byKey.get(key);
+    const parsed = parseAgentSessionKey(key);
+    const group = parsed
+      ? ensureGroup(
+          `agent:${normalizeLowercaseStringOrEmpty(parsed.agentId)}`,
+          resolveAgentGroupLabel(state, parsed.agentId),
+        )
+      : ensureGroup("other", "Other Sessions");
+    const scopeLabel = normalizeOptionalString(parsed?.rest) ?? key;
+    group.options.push({
+      key,
+      label: resolveSessionScopedOptionLabel(key, row, parsed?.rest),
+      scopeLabel,
+      title: key,
+    });
+  };
+
+  for (const row of rows) {
+    if (row.archived) {
+      continue;
+    }
+    if (row.kind === "global" || row.kind === "unknown") {
+      continue;
+    }
+    if (hideCron && isCronSessionKey(row.key)) {
+      continue;
+    }
+    if (isSubagentSessionKey(row.key) || row.spawnedBy) {
+      continue;
+    }
+    addOption(row.key);
+  }
+
+  const activeSessionKey = normalizeOptionalString(sessionKey) ?? "";
+  if (activeSessionKey && !seenKeys.has(activeSessionKey)) {
+    if (byKey.has(activeSessionKey) || parseAgentSessionKey(activeSessionKey)) {
+      addOption(activeSessionKey);
+    }
+  }
+
+  for (const group of groups.values()) {
+    group.options.sort((a, b) => {
+      const aTs = byKey.get(a.key)?.updatedAt ?? 0;
+      const bTs = byKey.get(b.key)?.updatedAt ?? 0;
+      return bTs - aTs;
+    });
+  }
+
+  for (const group of groups.values()) {
+    const counts = new Map<string, number>();
+    for (const option of group.options) {
+      counts.set(option.label, (counts.get(option.label) ?? 0) + 1);
+    }
+    for (const option of group.options) {
+      if ((counts.get(option.label) ?? 0) > 1 && option.scopeLabel !== option.label) {
+        option.label = `${option.label} · ${option.scopeLabel}`;
+      }
+    }
+  }
+
+  return Array.from(groups.values())
+    .filter((group) => group.options.length > 0)
+    .toSorted((a, b) => a.label.localeCompare(b.label));
 }
 
 function resolveAgentGroupLabel(state: AppViewState, agentIdRaw: string): string {

@@ -21,6 +21,7 @@
 | 文件 | 用途 |
 |------|------|
 | [`PLAN.md`](./PLAN.md) | MVP 开发计划：任务、验收、风险、决策 |
+| [`CHATAGENT.md`](./CHATAGENT.md) | **`/chatagent` 新页面**功能梳理与验收（PinchChat 式布局） |
 | [`STATUS.md`](./STATUS.md) | **当前进度**与代码库审计（随开发更新） |
 | [`VIBECODING.md`](./VIBECODING.md) | AI 上下文地图：改哪些文件、提示词模板 |
 | [`openclaw.example.json5`](./openclaw.example.json5) | Gateway 配置样例 |

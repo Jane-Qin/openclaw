@@ -14,12 +14,16 @@ export type ChatRunControlsProps = {
   onNewSession: () => void;
   onSend: () => void;
   onStoreDraft: (draft: string) => void;
+  hideExport?: boolean;
+  hideNewSession?: boolean;
+  leadingExtras?: TemplateResult;
 };
 
 export function renderChatRunControls(props: ChatRunControlsProps) {
   return html`
     <div class="agent-chat__toolbar-right">
-      ${props.canAbort
+      ${props.leadingExtras ?? nothing}
+      ${props.canAbort || props.hideNewSession
         ? nothing
         : html`
             <button
@@ -32,16 +36,20 @@ export function renderChatRunControls(props: ChatRunControlsProps) {
               <span class="agent-chat__control-label">${t("chat.runControls.newSession")}</span>
             </button>
           `}
-      <button
-        class="btn btn--ghost"
-        @click=${props.onExport}
-        title=${t("chat.runControls.export")}
-        aria-label=${t("chat.runControls.exportChat")}
-        ?disabled=${!props.hasMessages}
-      >
-        ${icons.download}
-        <span class="agent-chat__control-label">${t("chat.runControls.export")}</span>
-      </button>
+      ${props.hideExport
+        ? nothing
+        : html`
+            <button
+              class="btn btn--ghost"
+              @click=${props.onExport}
+              title=${t("chat.runControls.export")}
+              aria-label=${t("chat.runControls.exportChat")}
+              ?disabled=${!props.hasMessages}
+            >
+              ${icons.download}
+              <span class="agent-chat__control-label">${t("chat.runControls.export")}</span>
+            </button>
+          `}
 
       ${props.canAbort
         ? html`

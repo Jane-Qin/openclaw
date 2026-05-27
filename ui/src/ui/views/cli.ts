@@ -32,18 +32,19 @@ export type CliProps = {
  */
 function buildPtyWsUrl(gatewayUrl: string, sessionKey: string, token: string): string {
   try {
-    const base = new URL(gatewayUrl, window.location.href);
-    // Replace pathname with /tui/pty, preserve protocol/host/port
-    base.pathname = "/tui/pty";
-    base.search = ""; // clear any existing query
-    base.hash = ""; // clear any fragment
-    base.searchParams.set("sessionKey", sessionKey);
-    if (token) {
-      base.searchParams.set("token", token);
+    const gateway = new URL(gatewayUrl, window.location.href);
+    const pty = new URL(gateway.origin);
+    pty.protocol = gateway.protocol;
+    pty.pathname = "/tui/pty";
+    pty.search = "";
+    pty.hash = "";
+    pty.searchParams.set("sessionKey", sessionKey);
+    const trimmedToken = token.trim();
+    if (trimmedToken) {
+      pty.searchParams.set("token", trimmedToken);
     }
-    return base.href;
+    return pty.href;
   } catch {
-    // Fallback: naive string replacement
     const wsBase = gatewayUrl.replace(/\/$/, "");
     return `${wsBase}/../tui/pty?sessionKey=${encodeURIComponent(sessionKey)}&token=${encodeURIComponent(token)}`;
   }
@@ -60,6 +61,9 @@ export class OcCliTerminal extends LitElement {
   private fitAddon?: FitAddon;
   private ws?: WebSocket;
   private resizeObs?: ResizeObserver;
+  private onDataDisposable?: { dispose(): void };
+  private lastPtyUrl = "";
+  private connectScheduled = false;
 
   // No shadow DOM — xterm manages its own DOM
   override createRenderRoot() {
@@ -76,20 +80,34 @@ export class OcCliTerminal extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>) {
-    // Reconnect if gatewayUrl, token, or sessionKey changes
     if (
       (changed.has("gatewayUrl") || changed.has("token") || changed.has("sessionKey")) &&
-      this.gatewayUrl &&
-      this.token &&
-      this.sessionKey
+      this.term
     ) {
-      this.connectPty();
+      this.scheduleConnectPty();
     }
+  }
+
+  private scheduleConnectPty() {
+    if (this.connectScheduled) {
+      return;
+    }
+    this.connectScheduled = true;
+    queueMicrotask(() => {
+      this.connectScheduled = false;
+      if (!this.term || !this.gatewayUrl || !this.sessionKey || !this.token.trim()) {
+        return;
+      }
+      this.connectPty();
+    });
   }
 
   private cleanup() {
     this.resizeObs?.disconnect();
     this.resizeObs = undefined;
+
+    this.onDataDisposable?.dispose();
+    this.onDataDisposable = undefined;
 
     if (this.ws) {
       try {
@@ -136,12 +154,29 @@ export class OcCliTerminal extends LitElement {
     this.term = t;
     this.fitAddon = fit;
 
-    if (this.gatewayUrl && this.token && this.sessionKey) {
-      this.connectPty();
+    if (this.gatewayUrl && this.sessionKey) {
+      if (!this.token.trim()) {
+        t.writeln("\r\n\x1b[31m● Gateway credentials required for TUI mode\x1b[0m\r\n");
+        return;
+      }
+      this.scheduleConnectPty();
     }
   }
 
   private connectPty() {
+    if (!this.gatewayUrl || !this.sessionKey || !this.token.trim()) {
+      return;
+    }
+
+    const ptyUrl = buildPtyWsUrl(this.gatewayUrl, this.sessionKey, this.token);
+    if (ptyUrl === this.lastPtyUrl && this.ws?.readyState === WebSocket.OPEN) {
+      return;
+    }
+    if (this.ws?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+    this.lastPtyUrl = ptyUrl;
+
     // Close existing connection
     if (this.ws) {
       try {
@@ -150,7 +185,6 @@ export class OcCliTerminal extends LitElement {
       this.ws = undefined;
     }
 
-    const ptyUrl = buildPtyWsUrl(this.gatewayUrl, this.sessionKey, this.token);
     const ws = new WebSocket(ptyUrl);
     this.ws = ws;
 
@@ -177,7 +211,8 @@ export class OcCliTerminal extends LitElement {
     };
 
     // xterm keyboard input → PTY stdin
-    this.term?.onData((data) => {
+    this.onDataDisposable?.dispose();
+    this.onDataDisposable = this.term?.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
@@ -201,6 +236,7 @@ export class OcCliTerminal extends LitElement {
 export function renderCli(props: CliProps) {
   return html`
     <oc-cli-terminal
+      class="cli"
       .sessionKey=${props.sessionKey}
       .gatewayUrl=${props.gatewayUrl}
       .token=${props.token}

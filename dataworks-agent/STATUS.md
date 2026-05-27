@@ -2,7 +2,7 @@
 
 > 随开发推进更新本文件；详细计划见 [`PLAN.md`](./PLAN.md)。
 
-**最后更新：** 2026-05-25（T3 全部完成，集成调试通过）
+**最后更新：** 2026-05-26（T4.5 ChatAgent 新页面完成）
 
 ---
 
@@ -16,7 +16,8 @@
 | T3-A 后端 PTY Bridge | ✅ | `server-pty.ts` 已建，`server-http.ts` 已改 |
 | T3-B 前端 TUI 视图 | ✅ | `cli.ts` 已重写为 PTY 桥接，app-render 已适配 |
 | T3-C 集成调试 | ✅ | PTY spawn/输出/resize/键盘/Auth/断开清理全部通过 |
-| T4 Chat/TUI Toggle | ⬜ **下一重点** | |
+| T4 Chat/TUI Toggle | ✅ | segmented toggle + 路由切换 + PTY 生命周期 |
+| **T4.5 ChatAgent 新页面** | **✅** | `/chatagent` 自定义 shell + 左会话栏 + 顶栏导出/Chat-TUI + 会话菜单 |
 | T5–T6 | ⬜ | |
 
 ---
@@ -72,7 +73,16 @@
 | T3-C.2 | resize 事件传递 | ✅ | JSON resize → pty.resize → TUI 重渲染 |
 | T3-C.3 | sessionKey 传递 | ✅ | --session 参数传入，Chat/TUI 共享历史 |
 | T3-C.4 | 异常处理 | ✅ | 无效 token → 401; WS 断开 → PTY cleanup |
-| T4 | Chat/TUI Toggle | ⬜ **下一重点** | 路由 **`/chat` ⇄ `/cli`** |
+| T4 | Chat/TUI Toggle | ✅ 完成 | segmented toggle，路由 `/chat` ⇄ `/cli`，PTY 断开/重连 |
+| T4.1 | chat header 加 toggle | ✅ | `renderChatTuiToggle()` in `app-render.helpers.ts` |
+| T4.2 | 路由切换保持 sessionKey | ✅ | `state.setTab()` 切换，sessionKey 自动保持 |
+| T4.3 | PTY 会话生命周期 | ✅ | 切走断开，切回重连；修复 `onData` disposable 泄漏 |
+| **T4.5** | **ChatAgent 新页面** | **✅ 完成** | `/chatagent` 自定义 shell，旧页不受影响 |
+| T4.5.1 | Tab 路由注册 | ✅ | `navigation.ts` 加 `chatagent` Tab + `/chatagent` 路由 + `isChatSurfaceTab()` |
+| T4.5.2 | 状态字段 | ✅ | `chatAgentViewMode`/`chatAgentSessionsCollapsed`/`chatAgentSessionMenuKey` |
+| T4.5.3 | 自定义 shell 渲染 | ✅ | `renderChatAgentPage()` + `renderChatAgentSessionGroups()` |
+| T4.5.4 | 公共代码适配 | ✅ | `app-settings.ts`/`app-lifecycle.ts` 补 chatagent 条件 |
+| T4.5.5 | 样式 | ✅ | `layout.css` 新增 chatagent 布局 |
 | T5 | iframe 嵌入 | ⬜ 待做 | |
 | T6 | 演示准备 | ⬜ 待做 | |
 
@@ -89,19 +99,23 @@
 7. **`gateway.bind` 是符号名**：配置值 `"loopback"` 不是 IP 地址，传给 `openclaw tui --url` 会导致连接失败。必须用 `resolveGatewayBindHost()` 解析为 `"127.0.0.1"`。
 8. **`@lydell/node-pty` 预编译**：项目已有此包（v1.2.0-beta.12），无需额外安装 node-pty 或 node-gyp。Windows 上用 ConPTY，spawn command 必须是 `process.execPath`。
 9. **TUI 启动耗时**：`openclaw tui` 子进程从 spawn 到连上 Gateway 约 5-10 秒，前端应避免过早断开 WS。
+10. **Chat/TUI Toggle**：segmented toggle 在 content-header `page-meta` 区域（`renderChatTuiToggle` in `app-render.helpers.ts`），点击调用 `state.setTab()` 切换 `/chat` ⇄ `/cli`。TUI 模式下不显示 chat controls（refresh/thinking/toolcalls/focus/cron）。切走 TUI 时 PTY WS 断开、子进程被杀；切回时重新 spawn。`OcCliTerminal.onData` 回调必须通过 disposable 管理，避免重复 `connectPty` 时泄漏。
+11. **ChatAgent 页面（`/chatagent`）**：自定义 shell（`renderChatAgentPage` in `app-render.ts`），完全绕过现有 sidebar + content-header 布局。Chat/TUI 切换使用 `state.chatAgentViewMode`（同页内切），不复用 T4 的 `renderChatTuiToggle()`（它用 `state.setTab` 跨 tab 跳转）。`isChatSurfaceTab()` 统一 chat/cli/chatagent 的公共逻辑判断。旧页 `/chat`/`/cli` 行为不受影响——所有改动为纯增量扩展。
+12. **公共代码影响范围**：`navigation.ts`（新增 tab+路由+辅助函数）、`app-settings.ts`（`refreshActiveTab` 加 case、`applyTabSelection`/`syncUrlWithTab` 补条件）、`app-lifecycle.ts`（`handleUpdated` 用 `isChatSurfaceTab`）、`app-render.helpers.ts`（导出 `resolveSidebarChatSessionKey`）。所有改动不修改已有分支逻辑。
 
 ---
 
 ## 建议的下一步（按顺序）
 
-**当前重点：T4 Chat/TUI Toggle**
+**当前重点：T5 iframe 嵌入数据中台**
 
 | 步骤 | 命令/操作 |
 |------|----------|
-| 1. session-controls.ts 加 toggle | Chat header 区域加 "Chat / TUI" segmented toggle |
-| 2. 路由切换 | 点击 toggle 切换 `/chat` ⇄ `/cli`，保持 sessionKey |
-| 3. PTY 会话管理 | 切走时决定是否保留 PTY 会话 |
-| 4. 验证 | Chat 发消息 → 切 TUI 看历史 → 反之亦然 |
+| 1. basePath 配置 | `gateway.controlUi.basePath: "/openclaw"` |
+| 2. allowedOrigins | 加数据中台域名 |
+| 3. Nginx 反代 | `/openclaw/* → http://gateway:18789/*`，带 WS 升级 |
+| 4. iframe 嵌入 | `<iframe src="/openclaw/" />` |
+| 5. token 传递 | postMessage → sessionStorage |
 
 **补做：** T1.2/T1.3（DataWorks 配置与平台 Key）；T1.6 演示前再补。
 
@@ -117,3 +131,5 @@
 | 2026-05-25 | 修正审计要点 #2：`mode:"tui"` 不存在；CLI 与 Chat 共用同一 `GatewayBrowserClient` 实例（`mode: "webchat"`） |
 | 2026-05-25 | **架构升级**：T3 从"Chat+CLI 双渲染"拆分为 T3-A/T3-B/T3-C；TUI 采用 xterm.js + PTY 桥接方案 |
 | 2026-05-25 | **T3 完成**：T3-A/T3-B/T3-C 全部通过；修复 3 个关键 bug（import.meta.url 路径、chat→tui 子命令、bind 符号名解析）；审计要点扩展至 9 条；下一步改为 T4 |
+| 2026-05-26 | **T4 完成**：Chat/TUI segmented toggle 实现；路由 `/chat` ⇄ `/cli` 保持 sessionKey；PTY 切走断开/切回重连；修复 `onData` disposable 泄漏；下一步改为 T5 |
+| 2026-05-26 | **T4.5 完成**：`/chatagent` 新页面实现；CHATAGENT.md 审查修订 7 点落地；公共代码纯增量扩展（`isChatSurfaceTab`/`refreshActiveTab` case/`applyTabSelection` 条件/`handleUpdated` 条件）；旧页行为不变；build 通过；27 项测试通过；审计要点扩展至 12 条 |

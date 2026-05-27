@@ -1091,6 +1091,26 @@ export const en: TranslationMap = {
       thinkingLevel: "Chat thinking level",
     },
   },
+  chatagent: {
+    sessions: {
+      empty: "No sessions",
+      noResults: "No matching sessions",
+      searchPlaceholder: "Search sessions",
+      actions: "Session actions",
+      rename: "Rename",
+      renamePrompt: "Rename session",
+      delete: "Delete",
+      deleteConfirm: 'Delete session "{name}"?\n\nThis will archive its transcript.',
+    },
+    composer: {
+      attach: "Attach file",
+    },
+    composeMenu: {
+      title: "Context management",
+      hint: "Manage wisely and save your Credits",
+      compact: "Compress current session",
+    },
+  },
   languages: {
     en: "English",
     zhCN: "简体中文 (Simplified Chinese)",

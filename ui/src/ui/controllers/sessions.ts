@@ -50,6 +50,28 @@ type LoadSessionsOverrides = {
   configuredAgentsOnly?: boolean;
 };
 
+/** Chat surfaces load sessions without recency filtering so older rows stay visible. */
+export const CHAT_SESSIONS_ACTIVE_MINUTES = 0;
+export const CHAT_SESSIONS_REFRESH_LIMIT = 100;
+export const CHAT_SESSIONS_LOAD_OVERRIDES: LoadSessionsOverrides = {
+  activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
+  limit: CHAT_SESSIONS_REFRESH_LIMIT,
+  includeGlobal: true,
+  includeUnknown: true,
+  configuredAgentsOnly: false,
+};
+
+export function loadChatSurfaceSessions(
+  state: SessionsState,
+  overrides?: LoadSessionsOverrides,
+) {
+  return loadSessions(state, {
+    ...CHAT_SESSIONS_LOAD_OVERRIDES,
+    showArchived: state.sessionsShowArchived,
+    ...overrides,
+  });
+}
+
 type CreateSessionParams = {
   agentId?: string;
   label?: string;
@@ -549,6 +571,7 @@ export async function patchSession(
     verboseLevel?: string | null;
     reasoningLevel?: string | null;
   },
+  refreshOverrides?: LoadSessionsOverrides,
 ) {
   if (!state.client || !state.connected) {
     return;
@@ -567,7 +590,7 @@ export async function patchSession(
   }
   try {
     await state.client.request("sessions.patch", params);
-    await loadSessions(state);
+    await loadSessions(state, refreshOverrides);
   } catch (err) {
     state.sessionsError = String(err);
   }
@@ -603,6 +626,7 @@ export async function createSessionAndRefresh(
 export async function deleteSessionsAndRefresh(
   state: SessionsState,
   keys: string[],
+  options?: { skipConfirm?: boolean; refreshOverrides?: LoadSessionsOverrides },
 ): Promise<string[]> {
   if (!state.client || !state.connected || keys.length === 0) {
     return [];
@@ -611,11 +635,13 @@ export async function deleteSessionsAndRefresh(
   if (state.sessionsLoading) {
     return [];
   }
-  const confirmed = window.confirm(
-    `Delete ${keys.length} ${keys.length === 1 ? "session" : "sessions"}?\n\nThis will delete the session entries and archive their transcripts.`,
-  );
-  if (!confirmed) {
-    return [];
+  if (!options?.skipConfirm) {
+    const confirmed = window.confirm(
+      `Delete ${keys.length} ${keys.length === 1 ? "session" : "sessions"}?\n\nThis will delete the session entries and archive their transcripts.`,
+    );
+    if (!confirmed) {
+      return [];
+    }
   }
   const deleted: string[] = [];
   const deleteErrors: string[] = [];
@@ -630,7 +656,7 @@ export async function deleteSessionsAndRefresh(
     }
   });
   if (deleted.length > 0 && !refreshedDuringDelete) {
-    await loadSessions(state);
+    await loadSessions(state, options?.refreshOverrides);
   }
   if (deleteErrors.length > 0) {
     state.sessionsError = deleteErrors.join("; ");

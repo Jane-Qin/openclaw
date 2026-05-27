@@ -31,7 +31,7 @@ import {
   type ChatState,
 } from "./controllers/chat.ts";
 import { loadModels } from "./controllers/models.ts";
-import { loadSessions, type SessionsState } from "./controllers/sessions.ts";
+import { loadChatSurfaceSessions, loadSessions, type SessionsState } from "./controllers/sessions.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
 import { parseAgentSessionKey } from "./session-key.ts";
@@ -86,8 +86,11 @@ export type ChatAbortOptions = {
 };
 
 // Chat pickers need recency-free session rows so older channel chats remain selectable.
-export const CHAT_SESSIONS_ACTIVE_MINUTES = 0;
-export const CHAT_SESSIONS_REFRESH_LIMIT = 100;
+export {
+  CHAT_SESSIONS_ACTIVE_MINUTES,
+  CHAT_SESSIONS_LOAD_OVERRIDES,
+  CHAT_SESSIONS_REFRESH_LIMIT,
+} from "./controllers/sessions.ts";
 export {
   handleChatDraftChange,
   handleChatInputHistoryKey,
@@ -780,12 +783,7 @@ export async function refreshChat(
     requestUpdate();
   });
   const secondaryRefresh = Promise.allSettled([
-    loadSessions(host as unknown as SessionsState, {
-      activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
-      limit: CHAT_SESSIONS_REFRESH_LIMIT,
-      includeGlobal: true,
-      includeUnknown: true,
-    }),
+    loadChatSurfaceSessions(host as unknown as SessionsState),
     refreshChatAvatar(host),
     refreshChatModels(host),
     refreshChatCommands(host),

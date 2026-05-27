@@ -257,6 +257,12 @@ export class OpenClawApp extends LitElement {
   private chatMobileControlsTrigger: HTMLElement | null = null;
   @state() navDrawerOpen = false;
 
+  // ChatAgent page state
+  @state() chatAgentViewMode: "chat" | "tui" = "chat";
+  @state() chatAgentSessionsCollapsed = false;
+  @state() chatAgentSessionSearch = "";
+  @state() chatAgentSessionMenuKey: string | null = null;
+
   onSlashAction?: (action: string) => void | Promise<void>;
   chatLocalInputHistoryBySession: Record<string, Array<{ text: string; ts: number }>> = {};
   chatInputHistorySessionKey: string | null = null;

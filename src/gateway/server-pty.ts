@@ -18,12 +18,11 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { WebSocket, WebSocketServer } from "ws";
 import { getRuntimeConfig } from "../config/io.js";
+import type { GatewayAuthResult, ResolvedGatewayAuth } from "./auth.js";
 import {
-  authorizeHttpGatewayConnect,
-  type GatewayAuthResult,
-  type ResolvedGatewayAuth,
-} from "./auth.js";
-import { resolveHttpBrowserOriginPolicy } from "./http-auth-utils.js";
+  authorizeHttpGatewayConnectWithDeviceFallback,
+  resolveHttpBrowserOriginPolicy,
+} from "./http-auth-utils.js";
 import { resolveGatewayBindHost } from "./net.js";
 
 // ---------------------------------------------------------------------------
@@ -299,9 +298,9 @@ export async function handlePtyUpgrade(params: {
   const token = getQueryParam(req, "token");
   const browserOriginPolicy = resolveHttpBrowserOriginPolicy(req);
 
-  const authResult: GatewayAuthResult = await authorizeHttpGatewayConnect({
+  const authResult: GatewayAuthResult = await authorizeHttpGatewayConnectWithDeviceFallback({
     auth: resolvedAuth,
-    connectAuth: token ? { token, password: token } : null,
+    token,
     req,
     trustedProxies,
     allowRealIpFallback,

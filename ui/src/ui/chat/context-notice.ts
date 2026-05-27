@@ -1,4 +1,5 @@
 import { html, nothing } from "lit";
+import { t } from "../../i18n/index.ts";
 import { icons } from "../icons.ts";
 import type { GatewaySessionRow } from "../types.ts";
 
@@ -172,6 +173,30 @@ export function renderContextNotice(
           `
         : nothing}
     </div>
+  `;
+}
+
+/** Compact context usage badge for /chatagent compose toolbar. */
+export function renderContextUsageBadge(
+  session: GatewaySessionRow | undefined,
+  defaultContextTokens: number | null,
+) {
+  const model = getContextNoticeViewModel(session, defaultContextTokens);
+  if (!model) {
+    return nothing;
+  }
+  const label = t("chatagent.composer.contextUsed", {
+    pct: String(model.pct),
+    detail: model.detail,
+  });
+  return html`
+    <span
+      class="chatagent-context-badge ${model.warning ? "chatagent-context-badge--warning" : ""}"
+      role="status"
+      title=${label}
+    >
+      ${label}
+    </span>
   `;
 }
 

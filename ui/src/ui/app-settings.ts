@@ -457,7 +457,8 @@ export async function refreshActiveTab(host: SettingsHost) {
           loadWikiMemoryPalace(app),
         ]);
         break;
-      case "chat": {
+      case "chat":
+      case "chatagent": {
         const modelAuthRefresh = loadModelAuthStatusState(app).catch(() => undefined);
         await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);
         scheduleChatScroll(
@@ -653,12 +654,12 @@ function applyTabSelection(
     clearPendingSessionsChangedReload(host);
   }
 
-  // Cleanup chat module state when navigating away from chat
-  if (prev === "chat" && next !== "chat") {
+  // Cleanup chat module state when navigating away from chat surface
+  if ((prev === "chat" || prev === "chatagent") && next !== "chat" && next !== "chatagent") {
     resetChatViewState();
   }
 
-  if (next === "chat") {
+  if (next === "chat" || next === "chatagent") {
     host.chatHasAutoScrolled = false;
   }
   (next === "logs" ? startLogsPolling : stopLogsPolling)(
@@ -690,7 +691,7 @@ export function syncUrlWithTab(host: SettingsHost, tab: Tab, replace: boolean) {
   const currentPath = normalizePath(pathname);
   const url = new URL(href);
 
-  if (tab === "chat" && host.sessionKey) {
+  if ((tab === "chat" || tab === "chatagent") && host.sessionKey) {
     url.searchParams.set("session", host.sessionKey);
   } else {
     url.searchParams.delete("session");

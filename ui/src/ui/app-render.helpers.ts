@@ -11,12 +11,13 @@ import type { AppViewState } from "./app-view-state.ts";
 import { reconcileChatRunLifecycle } from "./chat/run-lifecycle.ts";
 import {
   renderChatSessionSelect as renderChatSessionSelectBase,
+  resolveChatAgentSessionGroups,
   resolveSessionOptionGroups,
 } from "./chat/session-controls.ts";
 import { refreshSlashCommands } from "./chat/slash-commands.ts";
 import { resolveControlUiAuthToken } from "./control-ui-auth.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
-import { createSessionAndRefresh, loadSessions } from "./controllers/sessions.ts";
+import { createSessionAndRefresh, loadChatSurfaceSessions, loadSessions } from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, isSettingsTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import { isCronSessionKey, parseSessionKey, resolveSessionDisplayName } from "./session-display.ts";
@@ -31,7 +32,13 @@ import type { ThemeMode } from "./theme.ts";
 import type { SessionsListResult } from "./types.ts";
 import type { ChatQueueItem } from "./ui-types.ts";
 
-export { isCronSessionKey, parseSessionKey, resolveSessionDisplayName, resolveSessionOptionGroups };
+export {
+  isCronSessionKey,
+  parseSessionKey,
+  resolveChatAgentSessionGroups,
+  resolveSessionDisplayName,
+  resolveSessionOptionGroups,
+};
 
 type SessionDefaultsSnapshot = {
   mainSessionKey?: string;
@@ -93,7 +100,7 @@ export function resolveDashboardHeaderContext(
   return { agentLabel };
 }
 
-function resolveSidebarChatSessionKey(state: AppViewState): string {
+export function resolveSidebarChatSessionKey(state: AppViewState): string {
   const snapshot = state.hello?.snapshot as
     | { sessionDefaults?: SessionDefaultsSnapshot }
     | undefined;
@@ -306,6 +313,40 @@ function renderChatAutoScrollToggle(state: AppViewState) {
     >
       ${icons.scrollText}
     </button>
+  `;
+}
+
+/**
+ * Segmented toggle to switch between Chat and TUI (terminal) views.
+ * Rendered in the content-header alongside session controls.
+ */
+export function renderChatTuiToggle(state: AppViewState) {
+  const isCli = state.tab === "cli";
+  return html`
+    <div class="chat-tui-toggle" role="radiogroup" aria-label="View mode">
+      <button
+        class="chat-tui-toggle__btn ${!isCli ? "chat-tui-toggle__btn--active" : ""}"
+        role="radio"
+        aria-checked=${!isCli}
+        ?disabled=${!isCli ? true : undefined}
+        @click=${() => state.setTab("chat")}
+        title="Chat view"
+      >
+        ${icons.messageSquare}
+        <span class="chat-tui-toggle__label">Chat</span>
+      </button>
+      <button
+        class="chat-tui-toggle__btn ${isCli ? "chat-tui-toggle__btn--active" : ""}"
+        role="radio"
+        aria-checked=${isCli}
+        ?disabled=${isCli ? true : undefined}
+        @click=${() => state.setTab("cli")}
+        title="TUI view"
+      >
+        ${icons.terminal}
+        <span class="chat-tui-toggle__label">TUI</span>
+      </button>
+    </div>
   `;
 }
 
@@ -707,11 +748,7 @@ export async function createChatSession(state: AppViewState): Promise<boolean> {
       showArchived: state.sessionsShowArchived,
     },
   );
-  if (
-    !nextSessionKey ||
-    state.sessionKey !== previousSessionKey ||
-    !canSwitchToNewChatSession(state)
-  ) {
+  if (!nextSessionKey || state.sessionKey !== previousSessionKey) {
     if (!nextSessionKey) {
       state.lastError =
         state.sessionsError ??
@@ -731,13 +768,7 @@ export async function createChatSession(state: AppViewState): Promise<boolean> {
 }
 
 async function refreshSessionOptions(state: AppViewState) {
-  await loadSessions(state as unknown as Parameters<typeof loadSessions>[0], {
-    activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
-    limit: CHAT_SESSIONS_REFRESH_LIMIT,
-    includeGlobal: true,
-    includeUnknown: true,
-    showArchived: state.sessionsShowArchived,
-  });
+  await loadChatSurfaceSessions(state as unknown as Parameters<typeof loadChatSurfaceSessions>[0]);
 }
 
 /** Count cron sessions hidden by the active agent-scoped chat filter. */

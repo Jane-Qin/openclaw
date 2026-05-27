@@ -1,11 +1,17 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getRuntimeConfig } from "../config/io.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { listDevicePairing, verifyDeviceToken } from "../infra/device-pairing.js";
+import { verifyPairingToken } from "../infra/pairing-token.js";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
 } from "../shared/string-coerce.js";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
+import {
+  AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN,
+  AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET,
+} from "./auth-rate-limit.js";
 import {
   authorizeHttpGatewayConnect,
   type GatewayAuthResult,
@@ -14,6 +20,10 @@ import {
 import { sendGatewayAuthFailure, sendMissingScopeForbidden } from "./http-common.js";
 import { ADMIN_SCOPE, CLI_DEFAULT_OPERATOR_SCOPES } from "./method-scopes.js";
 import { authorizeOperatorScopesForMethod } from "./method-scopes.js";
+import { resolveRequestClientIp } from "./net.js";
+
+const CONTROL_UI_OPERATOR_READ_SCOPE = "operator.read";
+const CONTROL_UI_OPERATOR_ROLE = "operator";
 
 export function getHeader(req: IncomingMessage, name: string): string | undefined {
   const raw = req.headers[normalizeLowercaseStringOrEmpty(name)];
@@ -255,4 +265,89 @@ export function resolveOpenAiCompatibleHttpSenderIsOwner(
     return true;
   }
   return resolveHttpSenderIsOwner(req, requestAuth);
+}
+
+export async function authorizeControlUiDeviceReadToken(token: string): Promise<boolean> {
+  const pairing = await listDevicePairing();
+  for (const device of pairing.paired) {
+    const operatorToken = device.tokens?.[CONTROL_UI_OPERATOR_ROLE];
+    if (!operatorToken || operatorToken.revokedAtMs) {
+      continue;
+    }
+    if (!verifyPairingToken(token, operatorToken.token)) {
+      continue;
+    }
+    const verified = await verifyDeviceToken({
+      deviceId: device.deviceId,
+      token,
+      role: CONTROL_UI_OPERATOR_ROLE,
+      scopes: [CONTROL_UI_OPERATOR_READ_SCOPE],
+    });
+    if (verified.ok) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function authorizeHttpGatewayConnectWithDeviceFallback(params: {
+  auth: ResolvedGatewayAuth;
+  token?: string;
+  req: IncomingMessage;
+  trustedProxies?: string[];
+  allowRealIpFallback?: boolean;
+  rateLimiter?: AuthRateLimiter;
+  browserOriginPolicy?: NonNullable<
+    Parameters<typeof authorizeHttpGatewayConnect>[0]["browserOriginPolicy"]
+  >;
+}): Promise<GatewayAuthResult> {
+  const token = normalizeOptionalString(params.token);
+  const connectAuth = token ? { token, password: token } : null;
+  const clientIp =
+    resolveRequestClientIp(
+      params.req,
+      params.trustedProxies,
+      params.allowRealIpFallback === true,
+    ) ?? params.req.socket?.remoteAddress;
+  let authResult = await authorizeHttpGatewayConnect({
+    auth: params.auth,
+    connectAuth,
+    req: params.req,
+    trustedProxies: params.trustedProxies,
+    allowRealIpFallback: params.allowRealIpFallback,
+    rateLimiter: token ? params.rateLimiter : undefined,
+    browserOriginPolicy: params.browserOriginPolicy,
+    clientIp,
+    rateLimitScope: AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET,
+  });
+  if (
+    authResult.ok ||
+    !token ||
+    params.auth.mode === "trusted-proxy" ||
+    params.auth.mode === "none"
+  ) {
+    return authResult;
+  }
+
+  const deviceRateCheck = params.rateLimiter?.check(
+    clientIp,
+    AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN,
+  );
+  if (deviceRateCheck && !deviceRateCheck.allowed) {
+    return {
+      ok: false,
+      reason: "rate_limited",
+      rateLimited: true,
+      retryAfterMs: deviceRateCheck.retryAfterMs,
+    };
+  }
+
+  const deviceTokenOk = await authorizeControlUiDeviceReadToken(token);
+  if (deviceTokenOk) {
+    params.rateLimiter?.reset(clientIp, AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN);
+    params.rateLimiter?.reset(clientIp, AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET);
+    return { ok: true, method: "device-token" };
+  }
+  params.rateLimiter?.recordFailure(clientIp, AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN);
+  return authResult;
 }

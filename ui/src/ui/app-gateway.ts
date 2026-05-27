@@ -4,8 +4,6 @@ import {
 } from "../../../src/gateway/events.js";
 import { ConnectErrorDetailCodes } from "../../../src/gateway/protocol/connect-error-details.js";
 import {
-  CHAT_SESSIONS_ACTIVE_MINUTES,
-  CHAT_SESSIONS_REFRESH_LIMIT,
   clearPendingQueueItemsForRun,
   flushChatQueueForEvent,
   refreshChatAvatar,
@@ -55,6 +53,7 @@ import {
 import { loadHealthState, type HealthState } from "./controllers/health.ts";
 import {
   applySessionsChangedEvent,
+  loadChatSurfaceSessions,
   loadSessions,
   subscribeSessions,
   type SessionsState,
@@ -195,7 +194,14 @@ function clearSessionsChangedReloadTimer(host: GatewayHost) {
 }
 
 function shouldRunDeferredSessionsReload(host: GatewayHost): boolean {
-  return host.connected && Boolean(host.client) && host.tab !== "chat";
+  return host.connected && Boolean(host.client);
+}
+
+function reloadSessionsForActiveTab(host: GatewayHost) {
+  if (host.tab === "chat" || host.tab === "chatagent") {
+    return loadChatSurfaceSessions(host as unknown as SessionsState);
+  }
+  return loadSessions(host as unknown as SessionsState);
 }
 
 function scheduleSessionsChangedReload(host: GatewayHost) {
@@ -205,7 +211,7 @@ function scheduleSessionsChangedReload(host: GatewayHost) {
     if (!shouldRunDeferredSessionsReload(host)) {
       return;
     }
-    void loadSessions(host as unknown as SessionsState);
+    void reloadSessionsForActiveTab(host);
   }, SESSIONS_CHANGED_RELOAD_DEBOUNCE_MS);
 }
 
@@ -688,10 +694,7 @@ function handleTerminalChatEvent(
   if (runId && host.refreshSessionsAfterChat.has(runId)) {
     host.refreshSessionsAfterChat.delete(runId);
     if (state === "final") {
-      void loadSessions(host as unknown as SessionsState, {
-        activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
-        limit: CHAT_SESSIONS_REFRESH_LIMIT,
-      });
+      void loadChatSurfaceSessions(host as unknown as SessionsState);
     }
   }
   // Reload history when tools were used so the persisted tool results
@@ -837,10 +840,7 @@ function handleSessionMessageGatewayEvent(
     deferredReloadHost.pendingSessionMessageReloadSessionKey = sessionKey;
     const refreshStartedAt = Date.now();
     const runIdBeforeRefresh = host.chatRunId;
-    void loadSessions(host as unknown as SessionsState, {
-      activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
-      limit: CHAT_SESSIONS_REFRESH_LIMIT,
-    }).finally(() =>
+    void loadChatSurfaceSessions(host as unknown as SessionsState).finally(() =>
       replayDeferredSessionMessageReloadAfterSessionsRefresh(
         host,
         sessionKey,

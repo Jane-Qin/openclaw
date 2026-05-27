@@ -223,15 +223,48 @@ Chat 视图使用 `GatewayBrowserClient`（`mode: "webchat"`），TUI 子进程�
 1. **降级 A**：TUI 子进程改用 `--local` 模式（嵌入式 runtime，不经过 Gateway），减少一跳
 2. **降级 B**：回退到原 Chat+CLI 方案（xterm 直接做 `chat.send` 的终端式渲染，不经过 PTY）
 
-### T4 Chat/TUI 切换 Toggle（0.5 天）
+### T4 Chat/TUI 切换 Toggle（0.5 天）— ✅ 已完成（2026-05-26）
 
-| Task | 详细 |
-|------|------|
-| **T4.1** | 在 `ui/src/ui/chat/session-controls.ts` 或 chat header 旁加一个 segmented toggle "Chat / TUI" |
-| **T4.2** | 点击切换路由：**`/chat` ⇄ `/cli`**，保持 `?sessionKey=xxx` URL 参数 |
-| **T4.3** | 切到 TUI 时用当前 sessionKey spawn PTY 进程（`--session` 参数） |
+| Task | 状态 | 详细 |
+|------|------|------|
+| **T4.1** | ✅ | 在 `ui/src/ui/app-render.helpers.ts` 加 `renderChatTuiToggle()` segmented toggle "Chat / TUI"，放在 content-header `page-meta` 区域 |
+| **T4.2** | ✅ | 点击切换路由：**`/chat` ⇄ `/cli`**，sessionKey 通过 `state.sessionKey` 自动保持，无需 URL 参数 |
+| **T4.3** | ✅ | 切到 TUI 时用当前 sessionKey spawn PTY 进程（`--session` 参数）；切走时 PTY WS 断开、子进程被杀；切回时重连 |
+
+**修改文件：**
+1. `ui/src/ui/app-render.helpers.ts` — 新增 `renderChatTuiToggle()` 函数
+2. `ui/src/ui/app-render.ts` — 导入并在 content-header 渲染 toggle；TUI 模式下隐藏 chat controls
+3. `ui/src/styles/layout.css` — 新增 `.chat-tui-toggle` segmented toggle 样式
+4. `ui/src/ui/views/cli.ts` — 修复 `onData` 回调 disposable 泄漏（重复 `connectPty` 时旧回调未清理）
 
 **验收：** Chat 模式发了消息切到 TUI 能看到刚才的对话；反之亦然。
+
+### T4.5 ChatAgent 新页面 — ✅ 已完成（2026-05-26）
+
+> 基于 CHATAGENT.md 规格实现的 `/chatagent` 新产品页，PinchChat 式嵌入对话工作台。
+> **旧页 `/chat`、`/cli` 行为完全不变。**
+
+| Task | 状态 | 详细 |
+|------|------|------|
+| **T4.5.1** | ✅ | 注册 `chatagent` Tab + 路由 `/chatagent`（`navigation.ts`）；新增 `isChatSurfaceTab()` 辅助函数 |
+| **T4.5.2** | ✅ | `app-view-state.ts` 新增 `chatAgentViewMode`/`chatAgentSessionsCollapsed`/`chatAgentSessionMenuKey` 状态；`app.ts` 初始化 |
+| **T4.5.3** | ✅ | `app-render.ts` 新增 `renderChatAgentPage()` + `renderChatAgentSessionGroups()` — 自定义 shell（左会话栏+中间对话区），绕过现有 sidebar/content-header 布局 |
+| **T4.5.4** | ✅ | `app-settings.ts` — `refreshActiveTab` 加 `case "chatagent"`；`applyTabSelection` 补 chat surface 条件；`syncUrlWithTab` 补 session 参数同步 |
+| **T4.5.5** | ✅ | `app-lifecycle.ts` — `handleUpdated` chat 滚动条件改用 `isChatSurfaceTab()` |
+| **T4.5.6** | ✅ | `layout.css` 新增 `.shell--chatagent` 及子组件样式 |
+| **T4.5.7** | ✅ | `app-render.helpers.ts` — 导出 `resolveSidebarChatSessionKey` |
+
+**修改文件：**
+1. `ui/src/ui/navigation.ts` — Tab 类型加 `"chatagent"`；TAB_PATHS；`isChatSurfaceTab()`；`iconForTab`
+2. `ui/src/ui/app-view-state.ts` — 新增 3 个 chatAgent 状态字段
+3. `ui/src/ui/app.ts` — `@state()` 初始化 chatAgent 状态
+4. `ui/src/ui/app-render.ts` — `renderChatAgentPage()` + `renderChatAgentSessionGroups()`；提前返回 chatagent shell；导入补充
+5. `ui/src/ui/app-render.helpers.ts` — 导出 `resolveSidebarChatSessionKey`
+6. `ui/src/ui/app-settings.ts` — `refreshActiveTab`/`applyTabSelection`/`syncUrlWithTab` 补 chatagent
+7. `ui/src/ui/app-lifecycle.ts` — `handleUpdated` 用 `isChatSurfaceTab()`
+8. `ui/src/styles/layout.css` — chatagent 样式
+
+**验收：** 访问 `/chatagent` 为左会话+中对话布局；旧 `/chat`/`/cli` 行为不变；`pnpm ui:build` 通过；14 项 navigation 测试通过；13 项 helpers 测试通过。
 
 ### T5 iframe 嵌入数据中台（1 天）
 
@@ -347,3 +380,5 @@ Chat 视图使用 `GatewayBrowserClient`（`mode: "webchat"`），TUI 子进程�
 | 2026-05-25 | 修正协议 inaccuracies：`mode:"tui"` 不存在（§4.2/D6/T3.4）；CLI 与 Chat 共享同一 WS 连接不改 mode；T3.2 包名 `@openclaw/ui` → `openclaw-control-ui`；§3.1 删除"OpenClaw TUI 协议"表述 | audit |
 | 2026-05-25 | **架构升级**：T3 从"Chat+CLI 双渲染"改为"Chat+TUI 双模式"；TUI 采用 xterm.js + PTY 桥接方案，spawn `openclaw tui` 子进程；新增后端 PTY Bridge（T3-A）；前端 cli.ts 重写为纯 xterm+WS 桥接（T3-B）；D6/D7 决策更新；§4 架构图重绘；与 #77362 方向对齐 | — |
 | 2026-05-25 | **T3 完成**：T3-A/T3-B/T3-C 全部验收通过；修正 spawn 命令从 `chat` → `tui`（避免 --local 冲突）；修正路径从 `../../` → `../`（import.meta.url rolldown 陷阱）；修正 bindHost 用 `resolveGatewayBindHost()` 解析符号名 | — |
+| 2026-05-26 | **T4 完成**：Chat/TUI segmented toggle 实现（`renderChatTuiToggle` in `app-render.helpers.ts`）；路由 `/chat` ⇄ `/cli` 保持 sessionKey；TUI 模式下隐藏 chat controls；修复 `OcCliTerminal` onData disposable 泄漏 | — |
+| 2026-05-26 | **T4.5 完成**：`/chatagent` 新页面实现（自定义 shell + 左会话栏 + 顶栏导出/Chat-TUI toggle + 会话⋮菜单重命名/删除）；公共代码影响分析通过（`navigation.ts`/`app-settings.ts`/`app-lifecycle.ts` 纯增量扩展）；旧页 `/chat`/`/cli` 行为不变；CHATAGENT.md 审查修订 7 点 | — |
