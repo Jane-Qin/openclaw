@@ -291,7 +291,7 @@ function resolveCliRenderProps(state: AppViewState) {
   };
 }
 
-function renderChatAgentPage(state: AppViewState) {
+function renderChatAgentPage(state: AppViewState, requestHostUpdate?: () => void) {
   const showTui = state.chatAgentViewMode === "tui";
   const version = state.hello?.server?.version ?? "";
   const activeSessionRow = state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey);
@@ -338,8 +338,11 @@ function renderChatAgentPage(state: AppViewState) {
                 <div class="chatagent-sessions__brand-row">
                   <span class="chatagent-sessions__brand">OpenClaw</span>
                   ${version
-                    ? html`<span class="chatagent-sessions__version">v${version}</span>`
-                    : nothing}
+                    ? html`
+                        <span class="chatagent-sessions__version">v${version}</span>
+                        ${renderSidebarConnectionStatus(state)}
+                      `
+                    : renderSidebarConnectionStatus(state)}
                 </div>
               `}
           <button
@@ -351,6 +354,7 @@ function renderChatAgentPage(state: AppViewState) {
               state.chatAgentSessionsCollapsed = !sessionsCollapsed;
               if (!sessionsCollapsed) {
                 state.chatAgentSessionMenuKey = null;
+                state.chatAgentSessionMenuPosition = null;
               }
             }}
           >
@@ -395,10 +399,11 @@ function renderChatAgentPage(state: AppViewState) {
         <div class="chatagent-sessions__list">
           ${sessionsCollapsed ? nothing : renderChatAgentSessionGroups(state)}
         </div>
-        <div class="chatagent-sessions__footer sidebar-utility-group">
+        <div class="chatagent-sessions__footer sidebar-utility-group" style="display: none;">
           ${renderTab(state, "config", { collapsed: sessionsCollapsed })}
         </div>
       </aside>
+      ${renderChatAgentSessionFloatingMenu(state)}
       <div class="chatagent-main">
         <header class="chatagent-header">
           <div class="chatagent-header__start">
@@ -445,7 +450,10 @@ function renderChatAgentPage(state: AppViewState) {
                 role="radio"
                 aria-checked=${showTui}
                 ?disabled=${showTui ? true : undefined}
-                @click=${() => { state.chatAgentViewMode = "tui"; }}
+                @click=${() => {
+                  state.chatAgentTuiEverOpened = true;
+                  state.chatAgentViewMode = "tui";
+                }}
                 title="TUI view"
               >
                 ${icons.terminal}
@@ -455,9 +463,8 @@ function renderChatAgentPage(state: AppViewState) {
           </div>
         </header>
         <section class="chatagent-body">
-          ${showTui
-            ? renderCli(resolveCliRenderProps(state))
-            : renderChat({
+          <div class="chatagent-pane ${showTui ? "chatagent-pane--hidden" : ""}">
+            ${renderChat({
                 sessionKey: state.sessionKey,
                 layoutVariant: "chatagent",
                 composeModelSelect: renderChatModelSelect(state),
@@ -470,6 +477,8 @@ function renderChatAgentPage(state: AppViewState) {
                     Boolean(state.chatRunId) ||
                     state.chatStream !== null ||
                     state.chatSending,
+                  session: activeSessionRow,
+                  defaultContextTokens: state.sessionsResult?.defaults?.contextTokens ?? null,
                   onCompact: () => state.handleSendChat("/compact", { restoreDraft: true }),
                 }),
                 onSessionKeyChange: (next) => {
@@ -520,6 +529,7 @@ function renderChatAgentPage(state: AppViewState) {
                 onChatScroll: (event) => state.handleChatScroll(event),
                 getDraft: () => state.chatMessage,
                 onDraftChange: (next) => state.handleChatDraftChange(next),
+                onRequestUpdate: requestHostUpdate,
                 attachments: state.chatAttachments,
                 onAttachmentsChange: (next) => (state.chatAttachments = next),
                 onSend: () => state.handleSendChat(),
@@ -560,8 +570,93 @@ function renderChatAgentPage(state: AppViewState) {
                 assistantAttachmentAuthToken: resolveAssistantAttachmentAuthToken(state),
                 basePath: state.basePath ?? "",
               })}
+          </div>
+          ${state.chatAgentTuiEverOpened
+            ? html`
+                <div class="chatagent-pane ${showTui ? "" : "chatagent-pane--hidden"}">
+                  ${renderCli({
+                    ...resolveCliRenderProps(state),
+                    active: showTui,
+                  })}
+                </div>
+              `
+            : nothing}
         </section>
       </div>
+    </div>
+  `;
+}
+
+function renderChatAgentSessionFloatingMenu(state: AppViewState) {
+  if (!state.chatAgentSessionMenuKey || !state.chatAgentSessionMenuPosition) {
+    return nothing;
+  }
+  const row = state.sessionsResult?.sessions?.find((entry) => entry.key === state.chatAgentSessionMenuKey);
+  const label = resolveSessionDisplayName(state.chatAgentSessionMenuKey, row);
+  return html`
+    <div
+      class="chatagent-session-floating-menu chatagent-session-item__menu"
+      role="menu"
+      style=${styleMap({
+        position: "fixed",
+        top: `${state.chatAgentSessionMenuPosition.top}px`,
+        left: `${state.chatAgentSessionMenuPosition.left}px`,
+      })}
+    >
+      <button
+        type="button"
+        class="chatagent-session-item__menu-item"
+        role="menuitem"
+        @click=${() => {
+          const sessionKey = state.chatAgentSessionMenuKey;
+          state.chatAgentSessionMenuKey = null;
+          state.chatAgentSessionMenuPosition = null;
+          if (!sessionKey) {
+            return;
+          }
+          const newLabel = window.prompt(t("chatagent.sessions.renamePrompt"), label);
+          if (newLabel && newLabel.trim()) {
+            void patchSession(
+              state,
+              sessionKey,
+              { label: newLabel.trim() },
+              CHAT_SESSIONS_LOAD_OVERRIDES,
+            );
+          }
+        }}
+      >
+        ${t("chatagent.sessions.rename")}
+      </button>
+      <button
+        type="button"
+        class="chatagent-session-item__menu-item chatagent-session-item__menu-item--danger"
+        role="menuitem"
+        @click=${() => {
+          const sessionKey = state.chatAgentSessionMenuKey;
+          state.chatAgentSessionMenuKey = null;
+          state.chatAgentSessionMenuPosition = null;
+          if (!sessionKey) {
+            return;
+          }
+          const confirmed = window.confirm(t("chatagent.sessions.deleteConfirm", { name: label }));
+          if (!confirmed) {
+            return;
+          }
+          void deleteSessionsAndRefresh(state, [sessionKey], {
+            skipConfirm: true,
+            refreshOverrides: CHAT_SESSIONS_LOAD_OVERRIDES,
+          }).then((deleted) => {
+            if (deleted.includes(sessionKey) && sessionKey === state.sessionKey) {
+              const mainKey = resolveSidebarChatSessionKey(state);
+              if (mainKey) {
+                switchChatSession(state, mainKey);
+              }
+            }
+          });
+        }}
+      >
+        ${t("chatagent.sessions.delete")}
+      </button>
     </div>
   `;
 }
@@ -608,6 +703,7 @@ function renderChatAgentSessionGroups(state: AppViewState) {
                   }
                   event.preventDefault();
                   state.chatAgentSessionMenuKey = null;
+                  state.chatAgentSessionMenuPosition = null;
                   state.navDrawerOpen = false;
                   if (option.key !== state.sessionKey) {
                     switchChatSession(state, option.key);
@@ -628,66 +724,37 @@ function renderChatAgentSessionGroups(state: AppViewState) {
                     aria-expanded=${menuOpen ? "true" : "false"}
                     @click=${(event: Event) => {
                       event.stopPropagation();
-                      state.chatAgentSessionMenuKey = menuOpen ? null : option.key;
+                      const trigger = event.currentTarget as HTMLElement | null;
+                      if (menuOpen) {
+                        state.chatAgentSessionMenuKey = null;
+                        state.chatAgentSessionMenuPosition = null;
+                        return;
+                      }
+                      const rect = trigger?.getBoundingClientRect();
+                      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+                      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+                      const menuWidth = 160;
+                      const menuHeight = 88;
+                      const margin = 8;
+                      const gap = 4;
+                      const left = Math.min(
+                        Math.max(margin, (rect?.right ?? 0) - menuWidth),
+                        Math.max(margin, viewportWidth - margin - menuWidth),
+                      );
+                      const preferredTop = (rect?.bottom ?? 0) + gap;
+                      const fallbackTop = (rect?.top ?? 0) - gap - menuHeight;
+                      const top = preferredTop + menuHeight <= viewportHeight - margin
+                        ? preferredTop
+                        : Math.max(margin, fallbackTop);
+                      state.chatAgentSessionMenuPosition = {
+                        top: Math.round(top),
+                        left: Math.round(left),
+                      };
+                      state.chatAgentSessionMenuKey = option.key;
                     }}
                   >
                     ${icons.moreHorizontal}
                   </button>
-                  ${menuOpen
-                    ? html`
-                        <div class="chatagent-session-item__menu" role="menu">
-                          <button
-                            type="button"
-                            class="chatagent-session-item__menu-item"
-                            role="menuitem"
-                            @click=${() => {
-                              state.chatAgentSessionMenuKey = null;
-                              const newLabel = window.prompt(
-                                t("chatagent.sessions.renamePrompt"),
-                                option.label,
-                              );
-                              if (newLabel && newLabel.trim()) {
-                                void patchSession(
-                                  state,
-                                  option.key,
-                                  { label: newLabel.trim() },
-                                  CHAT_SESSIONS_LOAD_OVERRIDES,
-                                );
-                              }
-                            }}
-                          >
-                            ${t("chatagent.sessions.rename")}
-                          </button>
-                          <button
-                            type="button"
-                            class="chatagent-session-item__menu-item chatagent-session-item__menu-item--danger"
-                            role="menuitem"
-                            @click=${() => {
-                              state.chatAgentSessionMenuKey = null;
-                              const confirmed = window.confirm(
-                                t("chatagent.sessions.deleteConfirm", { name: option.label }),
-                              );
-                              if (!confirmed) {
-                                return;
-                              }
-                              void deleteSessionsAndRefresh(state, [option.key], {
-                                skipConfirm: true,
-                                refreshOverrides: CHAT_SESSIONS_LOAD_OVERRIDES,
-                              }).then((deleted) => {
-                                if (deleted.includes(option.key) && option.key === state.sessionKey) {
-                                  const mainKey = resolveSidebarChatSessionKey(state);
-                                  if (mainKey) {
-                                    switchChatSession(state, mainKey);
-                                  }
-                                }
-                              });
-                            }}
-                          >
-                            ${t("chatagent.sessions.delete")}
-                          </button>
-                        </div>
-                      `
-                    : nothing}
                 </div>
               </div>
             </div>
@@ -1347,7 +1414,7 @@ export function renderApp(state: AppViewState) {
 
   // ChatAgent page: fully custom shell, bypasses sidebar + content-header layout.
   if (isChatAgent) {
-    return renderChatAgentPage(state);
+    return renderChatAgentPage(state, requestHostUpdate);
   }
 
   const presenceCount = state.presenceEntries.length;

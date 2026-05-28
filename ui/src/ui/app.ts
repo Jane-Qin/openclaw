@@ -259,9 +259,11 @@ export class OpenClawApp extends LitElement {
 
   // ChatAgent page state
   @state() chatAgentViewMode: "chat" | "tui" = "chat";
+  @state() chatAgentTuiEverOpened = false;
   @state() chatAgentSessionsCollapsed = false;
   @state() chatAgentSessionSearch = "";
   @state() chatAgentSessionMenuKey: string | null = null;
+  @state() chatAgentSessionMenuPosition: { top: number; left: number } | null = null;
 
   onSlashAction?: (action: string) => void | Promise<void>;
   chatLocalInputHistoryBySession: Record<string, Array<{ text: string; ts: number }>> = {};
@@ -645,6 +647,34 @@ export class OpenClawApp extends LitElement {
     }
     this.setChatMobileControlsOpen(false);
   };
+  private chatAgentSessionMenuPointerdownHandler = (e: Event) => {
+    if (!this.chatAgentSessionMenuKey) {
+      return;
+    }
+    const targetPath = e.composedPath();
+    const menuWrap = this.querySelector(".chatagent-session-item--menu-open .chatagent-session-item__menu-wrap");
+    const floatingMenu = this.querySelector(".chatagent-session-floating-menu");
+    if ((menuWrap && targetPath.includes(menuWrap)) || (floatingMenu && targetPath.includes(floatingMenu))) {
+      return;
+    }
+    this.chatAgentSessionMenuKey = null;
+    this.chatAgentSessionMenuPosition = null;
+  };
+  private chatAgentSessionMenuScrollHandler = () => {
+    if (!this.chatAgentSessionMenuKey) {
+      return;
+    }
+    this.chatAgentSessionMenuKey = null;
+    this.chatAgentSessionMenuPosition = null;
+  };
+  private chatAgentSessionMenuKeydownHandler = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || !this.chatAgentSessionMenuKey) {
+      return;
+    }
+    e.preventDefault();
+    this.chatAgentSessionMenuKey = null;
+    this.chatAgentSessionMenuPosition = null;
+  };
 
   override createRenderRoot() {
     return this;
@@ -674,7 +704,11 @@ export class OpenClawApp extends LitElement {
     };
     document.addEventListener("keydown", this.globalKeydownHandler);
     document.addEventListener("keydown", this.chatMobileControlsKeydownHandler);
+    document.addEventListener("keydown", this.chatAgentSessionMenuKeydownHandler);
     document.addEventListener("pointerdown", this.chatMobileControlsPointerdownHandler);
+    document.addEventListener("pointerdown", this.chatAgentSessionMenuPointerdownHandler);
+    window.addEventListener("scroll", this.chatAgentSessionMenuScrollHandler, true);
+    window.addEventListener("resize", this.chatAgentSessionMenuScrollHandler);
     handleConnected(this as unknown as Parameters<typeof handleConnected>[0]);
     this.nativeBridgeCleanup = initNativeBridge(this);
     void this.initWebPushState();
@@ -689,7 +723,11 @@ export class OpenClawApp extends LitElement {
     this.nativeBridgeCleanup?.();
     this.nativeBridgeCleanup = null;
     document.removeEventListener("keydown", this.chatMobileControlsKeydownHandler);
+    document.removeEventListener("keydown", this.chatAgentSessionMenuKeydownHandler);
     document.removeEventListener("pointerdown", this.chatMobileControlsPointerdownHandler);
+    document.removeEventListener("pointerdown", this.chatAgentSessionMenuPointerdownHandler);
+    window.removeEventListener("scroll", this.chatAgentSessionMenuScrollHandler, true);
+    window.removeEventListener("resize", this.chatAgentSessionMenuScrollHandler);
     if (this.sessionSwitchNoticeTimer !== null) {
       window.clearTimeout(this.sessionSwitchNoticeTimer);
       this.sessionSwitchNoticeTimer = null;

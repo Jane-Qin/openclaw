@@ -344,10 +344,13 @@ export async function handlePtyUpgrade(params: {
   return new Promise<boolean>((resolve) => {
     try {
       wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
+        // Browser PTY auth may use a paired device token; the spawned `openclaw tui`
+        // subprocess must use the gateway's own shared secret, not that device token.
         startPtySession({
           ws,
           sessionKey,
-          gatewayToken: token,
+          gatewayToken: resolvedAuth.mode === "token" ? resolvedAuth.token : undefined,
+          gatewayPassword: resolvedAuth.mode === "password" ? resolvedAuth.password : undefined,
           gatewayUrl,
           cols,
           rows,

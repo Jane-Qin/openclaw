@@ -1092,6 +1092,11 @@ export const en: TranslationMap = {
     },
   },
   chatagent: {
+    welcome: {
+      title: "Hello, I'm {name}",
+      ready: "Ready to assist",
+      subtitle: "Pick a scenario card below, or describe your question in the input box",
+    },
     sessions: {
       empty: "No sessions",
       noResults: "No matching sessions",
@@ -1104,9 +1109,13 @@ export const en: TranslationMap = {
     },
     composer: {
       attach: "Attach file",
+      placeholder: "Describe your question (Enter to send)",
+      placeholderWithAttachments: "Add a message or keep pasting images…",
+      placeholderDisconnected: "Connect to the Gateway to start chatting…",
     },
     composeMenu: {
       title: "Context management",
+      contextTitle: "Context used",
       hint: "Manage wisely and save your Credits",
       compact: "Compress current session",
     },

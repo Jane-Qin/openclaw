@@ -17,6 +17,11 @@ import { buildChatItems } from "../chat/build-chat-items.ts";
 import { renderChatQueue } from "../chat/chat-queue.ts";
 import { buildRawSidebarContent } from "../chat/chat-sidebar-raw.ts";
 import { renderWelcomeState, resolveAssistantDisplayAvatar } from "../chat/chat-welcome.ts";
+import {
+  getChatAgentComposerSuggestionPlaceholder,
+  setChatAgentComposerSuggestionPlaceholder,
+} from "../chatagent/composer-placeholder.ts";
+import { renderChatAgentWelcomeState } from "../chatagent/chat-welcome.ts";
 import { renderContextNotice } from "../chat/context-notice.ts";
 import { DeletedMessages } from "../chat/deleted-messages.ts";
 import { exportChatMarkdown } from "../chat/export.ts";
@@ -375,6 +380,23 @@ export const cleanupChatModuleState = resetChatViewState;
 function adjustTextareaHeight(el: HTMLTextAreaElement) {
   el.style.height = "auto";
   el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
+}
+
+function queryComposerTextarea(): HTMLTextAreaElement | null {
+  return document.querySelector<HTMLTextAreaElement>(
+    ".agent-chat__composer-combobox > textarea",
+  );
+}
+
+function applyComposerSuggestionPlaceholder(cardDesc: string) {
+  const textarea = queryComposerTextarea();
+  if (textarea) {
+    textarea.placeholder = cardDesc;
+  }
+}
+
+function focusComposerTextarea() {
+  queryComposerTextarea()?.focus({ preventScroll: true });
 }
 
 function focusComposerFromChrome(event: MouseEvent, connected: boolean) {
@@ -983,6 +1005,7 @@ function renderSlashMenu(
 }
 
 export function renderChat(props: ChatProps) {
+  const isChatAgentLayout = props.layoutVariant === "chatagent";
   const canCompose = props.connected;
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
@@ -1002,11 +1025,21 @@ export function renderChat(props: ChatProps) {
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
   const tokens = tokenEstimate(props.draft);
 
+  const chatAgentSuggestionPlaceholder = isChatAgentLayout
+    ? getChatAgentComposerSuggestionPlaceholder(props.sessionKey)
+    : undefined;
   const placeholder = props.connected
     ? hasAttachments
-      ? t("chat.composer.placeholderWithAttachments")
-      : t("chat.composer.placeholder", { name: props.assistantName || "agent" })
-    : t("chat.composer.placeholderDisconnected");
+      ? isChatAgentLayout
+        ? t("chatagent.composer.placeholderWithAttachments")
+        : t("chat.composer.placeholderWithAttachments")
+      : chatAgentSuggestionPlaceholder ??
+        (isChatAgentLayout
+          ? t("chatagent.composer.placeholder")
+          : t("chat.composer.placeholder", { name: props.assistantName || "agent" }))
+    : isChatAgentLayout
+      ? t("chatagent.composer.placeholderDisconnected")
+      : t("chat.composer.placeholderDisconnected");
 
   const requestUpdate = props.onRequestUpdate ?? (() => {});
   const splitRatio = props.splitRatio ?? 0.6;
@@ -1096,7 +1129,22 @@ export function renderChat(props: ChatProps) {
               </div>
             `
           : nothing}
-        ${isEmpty && !vs.searchOpen ? renderWelcomeState(props) : nothing}
+        ${isEmpty && !vs.searchOpen
+          ? isChatAgentLayout
+            ? renderChatAgentWelcomeState({
+                assistantName: props.assistantName,
+                assistantAvatar: props.assistantAvatar,
+                assistantAvatarUrl: props.assistantAvatarUrl,
+                basePath: props.basePath,
+                onSuggestionSelect: (cardDesc) => {
+                  setChatAgentComposerSuggestionPlaceholder(props.sessionKey, cardDesc);
+                  applyComposerSuggestionPlaceholder(cardDesc);
+                  requestUpdate();
+                  focusComposerTextarea();
+                },
+              })
+            : renderWelcomeState(props)
+          : nothing}
         ${isEmpty && vs.searchOpen
           ? html` <div class="agent-chat__empty">No matching messages</div> `
           : nothing}
@@ -1327,7 +1375,6 @@ export function renderChat(props: ChatProps) {
   const slashMenuVisible = isSlashMenuVisible();
   const activeSlashMenuOptionId = getActiveSlashMenuOptionId();
   const activeSlashMenuOptionLabel = getActiveSlashMenuOptionLabel();
-  const isChatAgentLayout = props.layoutVariant === "chatagent";
   const attachLabel = isChatAgentLayout
     ? t("chatagent.composer.attach")
     : t("chat.composer.attachFile");
@@ -1421,11 +1468,13 @@ export function renderChat(props: ChatProps) {
       ${renderSideResult(props.sideResult, props.onDismissSideResult)}
       ${renderFallbackIndicator(props.fallbackStatus)}
       ${renderCompactionIndicator(props.compactionStatus)}
-      ${renderContextNotice(activeSession, props.sessions?.defaults?.contextTokens ?? null, {
-        compactBusy,
-        compactDisabled: !props.connected || isBusy || showAbortableUi,
-        onCompact: props.onCompact,
-      })}
+      ${isChatAgentLayout
+        ? nothing
+        : renderContextNotice(activeSession, props.sessions?.defaults?.contextTokens ?? null, {
+            compactBusy,
+            compactDisabled: !props.connected || isBusy || showAbortableUi,
+            onCompact: props.onCompact,
+          })}
       ${props.showNewMessages
         ? html`
             <button class="chat-new-messages" type="button" @click=${props.onScrollToBottom}>
@@ -1477,7 +1526,7 @@ export function renderChat(props: ChatProps) {
             @keydown=${handleKeyDown}
             @input=${handleInput}
             @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
-            placeholder=${placeholder}
+            .placeholder=${placeholder}
             rows="1"
           ></textarea>
           <span

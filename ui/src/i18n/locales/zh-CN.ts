@@ -1067,6 +1067,11 @@ export const zh_CN: TranslationMap = {
     },
   },
   chatagent: {
+    welcome: {
+      title: "你好，我是 {name}",
+      ready: "准备就绪",
+      subtitle: "选择下方场景卡片，或在输入框中描述你的需求",
+    },
     sessions: {
       empty: "暂无会话",
       noResults: "没有匹配的会话",
@@ -1079,9 +1084,13 @@ export const zh_CN: TranslationMap = {
     },
     composer: {
       attach: "附加文件",
+      placeholder: "描述你的问题（Enter 发送）",
+      placeholderWithAttachments: "添加消息或继续粘贴图片…",
+      placeholderDisconnected: "连接到 Gateway 后开始聊天…",
     },
     composeMenu: {
       title: "上下文管理",
+      contextTitle: "已用上下文",
       hint: "合理管理，节省您的 Credits",
       compact: "压缩当前会话",
     },

@@ -3,6 +3,62 @@
   "entries": [
     {
       "count": 1,
+      "kind": "html-attribute",
+      "name": "aria-label",
+      "path": "ui/src/ui/app-render.helpers.ts",
+      "text": "View mode"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "title",
+      "path": "ui/src/ui/app-render.helpers.ts",
+      "text": "Chat view"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "title",
+      "path": "ui/src/ui/app-render.helpers.ts",
+      "text": "TUI view"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/ui/app-render.helpers.ts",
+      "text": "Chat"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/ui/app-render.helpers.ts",
+      "text": "TUI"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "aria-label",
+      "path": "ui/src/ui/app-render.ts",
+      "text": "View mode"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "title",
+      "path": "ui/src/ui/app-render.ts",
+      "text": "Chat view"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "title",
+      "path": "ui/src/ui/app-render.ts",
+      "text": "TUI view"
+    },
+    {
+      "count": 1,
       "kind": "html-text",
       "name": "text",
       "path": "ui/src/ui/app-render.ts",
@@ -13,7 +69,21 @@
       "kind": "html-text",
       "name": "text",
       "path": "ui/src/ui/app-render.ts",
+      "text": "Chat"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/ui/app-render.ts",
       "text": "OpenClaw"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/ui/app-render.ts",
+      "text": "TUI"
     },
     {
       "count": 1,

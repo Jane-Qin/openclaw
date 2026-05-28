@@ -4,7 +4,7 @@
 > 与 [`PLAN.md`](./PLAN.md) 的关系：PLAN 管 MVP 总路线；本文档专讲 **PinchChat 式嵌入对话页** 的 UI/交互规格。  
 > **现有 `/chat`、`/cli` 页面保留不动**，新能力在新路由上实现。
 
-**最后更新：** 2026-05-26
+**最后更新：** 2026-05-26（T4.6 TUI 保活 + 联调修复）
 
 ---
 
@@ -125,14 +125,35 @@
 **状态建议：**
 
 ```ts
-chatAgentViewMode: "chat" | "tui"  // 默认 "chat"
+chatAgentViewMode: "chat" | "tui"       // 默认 "chat"
+chatAgentTuiEverOpened: boolean         // 首次切 TUI 后为 true，用于懒挂载 PTY
 ```
 
 **URL（可选）：** `?view=tui` 便于刷新/分享。
 
 **Session 共享：** 两种模式同一 `sessionKey`；TUI 子进程 `openclaw tui --session ...`，与 Chat 历史互通。
 
-**TUI 注意：** 子进程连 Gateway 约 5–10 秒，需 loading，避免 WS 过早断开（见 `STATUS.md` 审计要点）。
+#### Chat / TUI 切换生命周期（T4.6 · 方案 A）
+
+| 场景 | 行为 |
+|------|------|
+| 首次切到 TUI | 挂载 `oc-cli-terminal`，建立 PTY WS + spawn `openclaw tui` |
+| 同 session 反复切 Chat ↔ TUI | **保活**：两 pane 同在 DOM，CSS `chatagent-pane--hidden` 隐藏；PTY 不断开 |
+| 切回 TUI | 瞬间恢复 xterm 缓冲；`active=true` 时 `fit` + `sendResize` + 主动刷新历史 |
+| 左侧换 session | `sessionKey` 变化 → `cli.ts` 重连 PTY（即使当前在 Chat 模式） |
+| 离开 `/chatagent` tab | `disconnectedCallback` 清理 WS + PTY 子进程 |
+
+**与旧页 `/chat`⇄`/cli` 差异：** 旧页跨 tab 仍采用 T4「切走断开、切回重连」；仅 `/chatagent` 内切换走保活方案。
+
+**历史同步：** Chat 模式发消息时，后台 TUI 子进程仍连 Gateway，收到 `chat.final` 等事件后会 `loadHistory()`；切回 TUI 时前端还会通过 PTY control frame 主动触发一次 `loadHistory()`，避免事件漏掉或刷新过早导致的不同步。
+
+**实现要点：**
+
+- `app-render.ts`：`chatagent-pane` 双 pane，不用 `showTui ? cli : chat` 互斥卸载
+- `cli.ts`：`active` 属性控制可见性；隐藏时不 `cleanup()` WS
+- `server-pty.ts`：spawn 子进程用 Gateway `resolvedAuth` 共享密钥，不用 browser device token
+
+**TUI 注意：** 子进程连 Gateway 约 5–10 秒，首次切 TUI 需 loading；保活后再次切回不重连。
 
 ---
 
@@ -321,6 +342,7 @@ ui/src/styles/
 - [ ] 左栏 **⋮** 可 **重命名**、**删除** 会话
 - [ ] 顶栏 **导出** 可下载当前会话 Markdown；无消息时禁用
 - [ ] 顶栏 **Chat / TUI** 切换正常；同一 `sessionKey` 历史互通
+- [ ] 同 session 反复切 Chat/TUI **不重连** PTY（T4.6 保活）；换 session 才重连
 - [ ] Chat 模式底栏有 **模型下拉**，切换生效
 - [ ] 底栏右侧显示 **上下文用量**（`x% 已用上下文 (xk / yk)`）
 - [ ] 底栏右侧 **≡ 菜单** 可打开（至少占位或含 1 项可用操作）
@@ -333,7 +355,8 @@ ui/src/styles/
 
 | 风险 | 应对 |
 |------|------|
-| TUI 启动慢 | loading + 勿过早断 WS |
+| TUI 启动慢 | 仅首次切 TUI 慢；保活后切换 instant；loading + 勿过早断 WS |
+| TUI 无历史 / token mismatch | spawn 子进程须用 Gateway `resolvedAuth`，见 `server-pty.ts` |
 | 删除当前会话 | 自动 fallback 到 main |
 | 重名会话标签 | 列表内 disambiguate（现有 session-controls 逻辑） |
 | 与旧页样式冲突 | `layoutVariant` + 独立 `chatagent.css` |
@@ -360,3 +383,4 @@ ui/src/styles/
 |------|------|
 | 2026-05-26 | 初稿：基于 PinchChat 目标布局 + 截图红框①②③ 修正导出/上下文/会话菜单位置 |
 | 2026-05-26 | 审查修订7点：去时间估算；L4 明确不复用 sidebar recent 改用 resolveSessionOptionGroups；H2 明确 T4 toggle 不适用需新建 viewMode 切换；C1 模型下拉需从 session-controls 拆出到 compose；C5 上下文徽章复用数据逻辑新建渲染；app-render.ts 改为完全自定义 shell；L1 版本号格式对齐实际显示 |
+| 2026-05-26 | T4.6：Chat/TUI 方案 A 保活（双 pane hide/show、`chatAgentTuiEverOpened`、`cli.ts` `active`）；T4.7 联调修复与 PTY 子进程鉴权说明 |

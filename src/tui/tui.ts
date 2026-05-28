@@ -1391,6 +1391,9 @@ export async function runTui(opts: RunTuiOptions): Promise<TuiResult> {
   editor.onCtrlP = () => {
     void openSessionSelector();
   };
+  editor.onCtrlR = () => {
+    void loadHistory();
+  };
   editor.onCtrlT = () => {
     showThinking = !showThinking;
     void loadHistory();

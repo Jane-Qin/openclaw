@@ -6,25 +6,18 @@ import {
   resolveChatAvatarRenderUrl,
   resolveAssistantTextAvatar,
 } from "../views/agents-utils.ts";
+import { CHATAGENT_SUGGESTION_CARDS } from "./suggestion-cards.ts";
 
-export type ChatWelcomeProps = {
+export type ChatAgentWelcomeProps = {
   assistantName: string;
   assistantAvatar: string | null;
   assistantAvatarUrl?: string | null;
   basePath?: string;
-  onDraftChange: (next: string) => void;
-  onSend: () => void;
+  onSuggestionSelect: (cardDesc: string) => void;
 };
 
-const WELCOME_SUGGESTION_KEYS = [
-  "chat.welcome.suggestions.whatCanYouDo",
-  "chat.welcome.suggestions.summarizeRecentSessions",
-  "chat.welcome.suggestions.configureChannel",
-  "chat.welcome.suggestions.checkSystemHealth",
-];
-
 function resolveAssistantAvatarUrl(
-  props: Pick<ChatWelcomeProps, "assistantAvatar" | "assistantAvatarUrl">,
+  props: Pick<ChatAgentWelcomeProps, "assistantAvatar" | "assistantAvatarUrl">,
 ): string | null {
   return resolveChatAvatarRenderUrl(props.assistantAvatarUrl, {
     identity: {
@@ -34,13 +27,7 @@ function resolveAssistantAvatarUrl(
   });
 }
 
-export function resolveAssistantDisplayAvatar(
-  props: Pick<ChatWelcomeProps, "assistantAvatar" | "assistantAvatarUrl">,
-): string | null {
-  return resolveAssistantAvatarUrl(props) ?? resolveAssistantTextAvatar(props.assistantAvatar);
-}
-
-export function renderWelcomeState(props: ChatWelcomeProps) {
+export function renderChatAgentWelcomeState(props: ChatAgentWelcomeProps) {
   const name = props.assistantName || "Assistant";
   const avatar = resolveAssistantAvatarUrl(props);
   const avatarText = avatar ? null : resolveAssistantTextAvatar(props.assistantAvatar);
@@ -48,7 +35,7 @@ export function renderWelcomeState(props: ChatWelcomeProps) {
   const logoUrl = agentLogoUrl(props.basePath ?? "");
 
   return html`
-    <div class="agent-chat__welcome" style="--agent-color: var(--accent)">
+    <div class="agent-chat__welcome agent-chat__welcome--chatagent" style="--agent-color: var(--accent)">
       <div class="agent-chat__welcome-glow"></div>
       ${avatar
         ? html`<img
@@ -63,32 +50,25 @@ export function renderWelcomeState(props: ChatWelcomeProps) {
           : html`<div class="agent-chat__avatar agent-chat__avatar--logo">
               <img src=${fallbackAvatarUrl} alt=${name} />
             </div>`}
-      <h2>${name}</h2>
+      <h2>${t("chatagent.welcome.title", { name })}</h2>
       <div class="agent-chat__badges">
         <span class="agent-chat__badge"
-          ><img src=${logoUrl} alt="" /> ${t("chat.welcome.ready")}</span
+          ><img src=${logoUrl} alt="" /> ${t("chatagent.welcome.ready")}</span
         >
       </div>
-      <p class="agent-chat__hint">
-        ${t("chat.welcome.hintBeforeShortcut")} <kbd>/</kbd>
-        ${t("chat.welcome.hintAfterShortcut")}
-      </p>
-      <div class="agent-chat__suggestions">
-        ${WELCOME_SUGGESTION_KEYS.map((key) => {
-          const text = t(key);
-          return html`
+      <p class="agent-chat__hint">${t("chatagent.welcome.subtitle")}</p>
+      <div class="agent-chat__suggestions agent-chat__suggestions--chatagent">
+        ${CHATAGENT_SUGGESTION_CARDS.map(
+          (card) => html`
             <button
               type="button"
               class="agent-chat__suggestion"
-              @click=${() => {
-                props.onDraftChange(text);
-                props.onSend();
-              }}
+              @click=${() => props.onSuggestionSelect(card.cardDesc)}
             >
-              ${text}
+              ${card.cardName}
             </button>
-          `;
-        })}
+          `,
+        )}
       </div>
     </div>
   `;

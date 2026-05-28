@@ -229,7 +229,8 @@ Chat 视图使用 `GatewayBrowserClient`（`mode: "webchat"`），TUI 子进程�
 |------|------|------|
 | **T4.1** | ✅ | 在 `ui/src/ui/app-render.helpers.ts` 加 `renderChatTuiToggle()` segmented toggle "Chat / TUI"，放在 content-header `page-meta` 区域 |
 | **T4.2** | ✅ | 点击切换路由：**`/chat` ⇄ `/cli`**，sessionKey 通过 `state.sessionKey` 自动保持，无需 URL 参数 |
-| **T4.3** | ✅ | 切到 TUI 时用当前 sessionKey spawn PTY 进程（`--session` 参数）；切走时 PTY WS 断开、子进程被杀；切回时重连 |
+| **T4.3** | ✅ | 旧页 `/chat`⇄`/cli`：切走断开、切回重连；`/chatagent` 见 **T4.6** 保活 |
+| **T4.6** | ✅ | `/chatagent` 同 session Chat/TUI hide/show 保活 PTY；换 session 重连 |
 
 **修改文件：**
 1. `ui/src/ui/app-render.helpers.ts` — 新增 `renderChatTuiToggle()` 函数

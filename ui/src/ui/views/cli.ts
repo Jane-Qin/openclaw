@@ -23,6 +23,8 @@ export type CliProps = {
   gatewayUrl: string;
   token: string;
   basePath?: string;
+  /** When false, keep PTY alive but pause resize handling (ChatAgent hide/show). */
+  active?: boolean;
 };
 
 /**
@@ -50,20 +52,96 @@ function buildPtyWsUrl(gatewayUrl: string, sessionKey: string, token: string): s
   }
 }
 
+/**
+ * Track IME composition state with multi-signal detection.
+ *
+ * Windows Chinese IME has unreliable composition event timing:
+ * compositionstart may fire late or not at all relative to keydown/onData.
+ * We use two independent signals to detect active composition:
+ *
+ * 1. composition-view.active class — set by xterm.js CompositionHelper
+ *    on compositionstart, cleared on compositionend. This is xterm.js's
+ *    own canonical state, but may not be set if compositionstart hasn't
+ *    fired yet when the first keystroke reaches onData.
+ *
+ * 2. input event with insertCompositionText — fires on every composition
+ *    keystroke. We set a flag on composition-related input events.
+ *
+ * On compositionend we clear _composing immediately so that xterm.js's
+ * final triggerDataEvent (fired in setTimeout(0) after compositionend)
+ * passes through the guard. The composition-view.active class is also
+ * cleared by xterm.js on compositionend, so both signals align.
+ */
+class CompositionGuard {
+  private _composing = false;
+  private _compositionView: Element | null = null;
+  private _textarea: HTMLTextAreaElement | null = null;
+
+  /** Bind DOM listeners on the xterm textarea and composition-view. */
+  attach(textarea: HTMLTextAreaElement, compositionView: Element): void {
+    this._textarea = textarea;
+    this._compositionView = compositionView;
+
+    textarea.addEventListener("compositionstart", this._onCompositionStart);
+    textarea.addEventListener("compositionend", this._onCompositionEnd);
+    textarea.addEventListener("input", this._onInput);
+  }
+
+  /** Remove all DOM listeners. */
+  detach(): void {
+    this._textarea?.removeEventListener("compositionstart", this._onCompositionStart);
+    this._textarea?.removeEventListener("compositionend", this._onCompositionEnd);
+    this._textarea?.removeEventListener("input", this._onInput);
+  }
+
+  /** Returns true if an IME composition appears to be in progress. */
+  isComposing(): boolean {
+    if (this._compositionView?.classList.contains("active")) {
+      return true;
+    }
+    if (this._composing) {
+      return true;
+    }
+    return false;
+  }
+
+  private _onCompositionStart = (): void => {
+    this._composing = true;
+  };
+
+  private _onCompositionEnd = (): void => {
+    // Clear immediately so the final composed text (sent by xterm.js
+    // via triggerDataEvent in setTimeout(0)) passes through the guard.
+    this._composing = false;
+  };
+
+  private _onInput = (ev: InputEvent): void => {
+    if (ev.inputType === "insertCompositionText" || ev.inputType === "deleteCompositionText") {
+      this._composing = true;
+    } else if (ev.inputType === "insertText") {
+      // Final text committed — ensure guard is open
+      this._composing = false;
+    }
+  };
+}
+
 @customElement("oc-cli-terminal")
 export class OcCliTerminal extends LitElement {
   @property({ type: String }) sessionKey = "";
   @property({ type: String }) gatewayUrl = "";
   @property({ type: String }) token = "";
   @property({ type: String }) basePath = "";
+  @property({ type: Boolean }) active = true;
 
   private term?: Terminal;
   private fitAddon?: FitAddon;
   private ws?: WebSocket;
   private resizeObs?: ResizeObserver;
+  private cleanupDomListeners?: () => void;
   private onDataDisposable?: { dispose(): void };
   private lastPtyUrl = "";
   private connectScheduled = false;
+  private compositionGuard = new CompositionGuard();
 
   // No shadow DOM — xterm manages its own DOM
   override createRenderRoot() {
@@ -80,10 +158,18 @@ export class OcCliTerminal extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>) {
+    if (changed.has("active") && this.term) {
+      if (this.active) {
+        this.resumeVisible();
+      }
+    }
     if (
       (changed.has("gatewayUrl") || changed.has("token") || changed.has("sessionKey")) &&
       this.term
     ) {
+      if (changed.has("sessionKey") || changed.has("gatewayUrl") || changed.has("token")) {
+        this.lastPtyUrl = "";
+      }
       this.scheduleConnectPty();
     }
   }
@@ -98,13 +184,32 @@ export class OcCliTerminal extends LitElement {
       if (!this.term || !this.gatewayUrl || !this.sessionKey || !this.token.trim()) {
         return;
       }
+      if (!this.active && !this.ws) {
+        return;
+      }
       this.connectPty();
+    });
+  }
+
+  private resumeVisible() {
+    queueMicrotask(() => {
+      this.fitAddon?.fit();
+      this.sendResize();
+      this.resetHorizontalScroll();
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+        this.scheduleConnectPty();
+      }
     });
   }
 
   private cleanup() {
     this.resizeObs?.disconnect();
     this.resizeObs = undefined;
+
+    this.cleanupDomListeners?.();
+    this.cleanupDomListeners = undefined;
+
+    this.compositionGuard.detach();
 
     this.onDataDisposable?.dispose();
     this.onDataDisposable = undefined;
@@ -129,6 +234,7 @@ export class OcCliTerminal extends LitElement {
       cursorBlink: true,
       fontSize: 14,
       fontFamily: "'Cascadia Code','Fira Code','JetBrains Mono',Menlo,Monaco,monospace",
+      scrollOnUserInput: false,
       theme: {
         background: "#1a1a2e",
         foreground: "#e0e0e0",
@@ -145,9 +251,78 @@ export class OcCliTerminal extends LitElement {
     t.writeln("\x1b[1mDataWorks Agent — TUI\x1b[0m");
     t.writeln("Connecting to PTY bridge...\r\n");
 
+    const resetHorizontalScroll = () => this.resetHorizontalScroll();
+    const resetHorizontalScrollSoon = () => {
+      resetHorizontalScroll();
+      window.requestAnimationFrame(resetHorizontalScroll);
+    };
+    const termElement = t.element;
+    this.addEventListener("scroll", resetHorizontalScrollSoon, { passive: true });
+    el.addEventListener("scroll", resetHorizontalScrollSoon, { passive: true });
+    termElement?.addEventListener("scroll", resetHorizontalScrollSoon, { passive: true });
+    window.addEventListener("scroll", resetHorizontalScrollSoon, { passive: true });
+
+    const textarea = this.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
+    const compositionView = this.querySelector(".composition-view") as HTMLElement | null;
+    if (textarea && compositionView) {
+      this.compositionGuard.attach(textarea, compositionView);
+    }
+
+    // Force composition-view to the cursor position.
+    // xterm.js's CompositionHelper often miscalculates the position on Windows,
+    // placing it at the far right. We override it using the terminal's cursor
+    // coordinates and cell dimensions derived from the actual DOM.
+    const repositionCompositionView = () => {
+      if (!compositionView || !this.term) return;
+      const buf = this.term.buffer?.active;
+      if (!buf) return;
+
+      const xtermEl = this.querySelector(".xterm-screen") as HTMLElement | null;
+      if (!xtermEl) return;
+
+      const rows = this.term.rows || 1;
+      const cols = this.term.cols || 1;
+      const cellWidth = xtermEl.clientWidth / cols;
+      const cellHeight = xtermEl.clientHeight / rows;
+
+      const cursorX = buf.cursorX ?? 0;
+      const cursorY = buf.cursorY ?? 0;
+
+      compositionView.style.left = `${Math.round(cursorX * cellWidth)}px`;
+      compositionView.style.top = `${Math.round(cursorY * cellHeight)}px`;
+
+      resetHorizontalScroll();
+    };
+
+    const onCompositionUpdate = () => {
+      repositionCompositionView();
+      window.requestAnimationFrame(repositionCompositionView);
+    };
+    const onCompositionEnd = () => {
+      resetHorizontalScroll();
+      window.requestAnimationFrame(resetHorizontalScroll);
+    };
+    textarea?.addEventListener("compositionstart", onCompositionUpdate);
+    textarea?.addEventListener("compositionupdate", onCompositionUpdate);
+    textarea?.addEventListener("compositionend", onCompositionEnd);
+
+    this.cleanupDomListeners = () => {
+      this.removeEventListener("scroll", resetHorizontalScrollSoon);
+      el.removeEventListener("scroll", resetHorizontalScrollSoon);
+      termElement?.removeEventListener("scroll", resetHorizontalScrollSoon);
+      window.removeEventListener("scroll", resetHorizontalScrollSoon);
+      textarea?.removeEventListener("compositionstart", onCompositionUpdate);
+      textarea?.removeEventListener("compositionupdate", onCompositionUpdate);
+      textarea?.removeEventListener("compositionend", onCompositionEnd);
+    };
+
     this.resizeObs = new ResizeObserver(() => {
+      if (!this.active) {
+        return;
+      }
       fit.fit();
       this.sendResize();
+      this.resetHorizontalScroll();
     });
     this.resizeObs.observe(el as HTMLElement);
 
@@ -159,7 +334,9 @@ export class OcCliTerminal extends LitElement {
         t.writeln("\r\n\x1b[31m● Gateway credentials required for TUI mode\x1b[0m\r\n");
         return;
       }
-      this.scheduleConnectPty();
+      if (this.active) {
+        this.scheduleConnectPty();
+      }
     }
   }
 
@@ -189,9 +366,11 @@ export class OcCliTerminal extends LitElement {
     this.ws = ws;
 
     ws.onopen = () => {
-      this.term?.write("\x1b[32m● PTY connected\x1b[0m\r\n");
-      // Send initial resize
-      this.sendResize();
+      if (this.active) {
+        this.term?.write("\x1b[32m● PTY connected\x1b[0m\r\n");
+        this.sendResize();
+        this.resetHorizontalScroll();
+      }
     };
 
     ws.onmessage = (evt) => {
@@ -211,8 +390,14 @@ export class OcCliTerminal extends LitElement {
     };
 
     // xterm keyboard input → PTY stdin
+    // Use CompositionGuard to block data during IME composition.
+    // The guard combines two signals: composition-view.active class
+    // (xterm.js internal state) and input event inputType detection.
     this.onDataDisposable?.dispose();
     this.onDataDisposable = this.term?.onData((data) => {
+      if (this.compositionGuard.isComposing()) {
+        return;
+      }
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
@@ -223,6 +408,28 @@ export class OcCliTerminal extends LitElement {
     if (!this.fitAddon || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     const { cols, rows } = this.fitAddon.proposeDimensions() ?? { cols: 120, rows: 30 };
     this.ws.send(JSON.stringify({ type: "resize", cols, rows }));
+  }
+
+  private resetHorizontalScroll() {
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollLeft = 0;
+    this.scrollLeft = 0;
+
+    const scrollableNodes = [
+      this.querySelector("#cli-term"),
+      this.querySelector(".xterm"),
+      this.querySelector(".xterm-screen"),
+      this.querySelector(".xterm-viewport"),
+      this.closest(".chatagent-pane"),
+      this.closest(".chatagent-body"),
+      this.closest(".chatagent-main"),
+      this.closest(".shell--chatagent"),
+    ];
+    for (const node of scrollableNodes) {
+      if (node instanceof HTMLElement) {
+        node.scrollLeft = 0;
+      }
+    }
   }
 
   override render() {
@@ -241,6 +448,7 @@ export function renderCli(props: CliProps) {
       .gatewayUrl=${props.gatewayUrl}
       .token=${props.token}
       .basePath=${props.basePath ?? ""}
+      .active=${props.active ?? true}
       style="display:block;height:100%;width:100%"
     ></oc-cli-terminal>
   `;
