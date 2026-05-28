@@ -325,10 +325,11 @@ export function renderReadingIndicatorGroup(
   assistant?: AssistantIdentity,
   basePath?: string,
   authToken?: string | null,
+  unifiedIcons = false,
 ) {
   return html`
     <div class="chat-group assistant">
-      ${renderChatAvatar("assistant", assistant, undefined, basePath, authToken)}
+      ${renderChatAvatar("assistant", assistant, undefined, basePath, authToken, unifiedIcons)}
       <div class="chat-group-messages">
         <div class="chat-bubble chat-reading-indicator" aria-hidden="true">
           <span class="chat-reading-indicator__dots">
@@ -347,12 +348,14 @@ export function renderStreamingGroup(
   assistant?: AssistantIdentity,
   basePath?: string,
   authToken?: string | null,
+  opts?: { hideSenderNames?: boolean; unifiedIcons?: boolean },
 ) {
-  const name = assistant?.name ?? "Assistant";
+  const hideSenderNames = opts?.hideSenderNames ?? false;
+  const unifiedIcons = opts?.unifiedIcons ?? false;
 
   return html`
     <div class="chat-group assistant">
-      ${renderChatAvatar("assistant", assistant, undefined, basePath, authToken)}
+      ${renderChatAvatar("assistant", assistant, undefined, basePath, authToken, unifiedIcons)}
       <div class="chat-group-messages">
         ${renderGroupedMessage(
           {
@@ -365,7 +368,7 @@ export function renderStreamingGroup(
           onOpenSidebar,
         )}
         <div class="chat-group-footer">
-          <span class="chat-sender-name">${name}</span>
+          ${hideSenderNames ? nothing : html`<span class="chat-sender-name">${assistant?.name ?? "Assistant"}</span>`}
           ${renderChatTimestamp(startedAt)}
         </div>
       </div>
@@ -397,10 +400,14 @@ export function renderMessageGroup(
     allowExternalEmbedUrls?: boolean;
     contextWindow?: number | null;
     onDelete?: () => void;
+    hideSenderNames?: boolean;
+    unifiedIcons?: boolean;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
   const assistantName = opts.assistantName ?? "Assistant";
+  const hideSenderNames = opts.hideSenderNames ?? false;
+  const unifiedIcons = opts.unifiedIcons ?? false;
   const resolvedUserName = resolveLocalUserName({
     name: opts.userName ?? null,
     avatar: opts.userAvatar ?? null,
@@ -440,6 +447,7 @@ export function renderMessageGroup(
         },
         opts.basePath,
         opts.assistantAttachmentAuthToken,
+        unifiedIcons,
       )}
       <div class="chat-group-messages">
         ${group.messages.map((item, index) =>
@@ -467,7 +475,7 @@ export function renderMessageGroup(
           ),
         )}
         <div class="chat-group-footer">
-          <span class="chat-sender-name">${who}</span>
+          ${hideSenderNames ? nothing : html`<span class="chat-sender-name">${who}</span>`}
           ${renderChatTimestamp(group.timestamp)} ${renderMessageMeta(meta)}
           ${opts.onDelete
             ? renderDeleteButton(opts.onDelete, normalizedRole === "user" ? "left" : "right")

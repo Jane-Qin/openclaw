@@ -937,7 +937,7 @@
 }
 
 .chat-send-btn:hover:not(:disabled) {
-  color: var(--text);
+  /* color: var(--text); */
   background: var(--bg-hover);
 }
 
@@ -1739,3 +1739,64 @@
 
 /* Mobile dropdown toggle — hidden on desktop */
 /* Mobile gear toggle + dropdown are hidden by default in layout.css */
+
+/* ChatAgent — Arco blue focus ring for input box in light mode */
+[data-theme-mode="light"] .chat--chatagent .agent-chat__input:focus-within {
+  border-color: #165DFF;
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.15);
+}
+
+/* Send button active state — Arco blue */
+[data-theme-mode="light"] .chat--chatagent .chat-send-btn:not(:disabled):not(.chat-send-btn--stop) {
+  color: #165DFF;
+}
+
+[data-theme-mode="light"] .chat--chatagent .chat-send-btn:hover:not(:disabled):not(.chat-send-btn--stop) {
+  background: #e8f3ff;
+  color: #165DFF;
+}
+
+/* ChatAgent welcome hero — Arco Design style (图3) */
+.agent-chat__welcome--chatagent {
+  width: min(100%, 720px);
+  align-items: flex-start;
+  text-align: left;
+  padding: 40px 0 24px;
+  gap: 16px;
+}
+
+.agent-chat__welcome-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.agent-chat__welcome-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1d2129;
+  margin: 0;
+  line-height: 1.3;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.agent-chat__welcome-title-name {
+  color: #1d2129;
+}
+
+.agent-chat__welcome-title-arrow {
+  font-size: 20px;
+  color: #165DFF;
+  font-weight: 400;
+}
+
+.agent-chat__welcome-desc {
+  font-size: 14px;
+  color: #86909c;
+  margin: 0;
+  line-height: 1.6;
+}

@@ -118,6 +118,7 @@ function startPtySession(params: {
     gatewayUrl,
     "--session",
     sessionKey,
+    "--no-header",
   ];
   if (gatewayToken) {
     chatArgs.push("--token", gatewayToken);
@@ -211,7 +212,7 @@ function startPtySession(params: {
         return;
       }
 
-      const env = { ...process.env } as Record<string, string>;
+      const env = { ...process.env, OPENCLAW_HIDE_BANNER: "1" } as Record<string, string>;
 
       pty = spawn(command, chatArgs, {
         cols,

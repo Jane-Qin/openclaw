@@ -9,6 +9,8 @@ export type TuiOptions = {
   timeoutMs?: number;
   historyLimit?: number;
   message?: string;
+  /** Suppress the header line (url/agent/session info) in the TUI. */
+  noHeader?: boolean;
   /**
    * Internal CLI guard: after the standalone TUI returns, force the child
    * process out if imported runtime handles keep the event loop alive.

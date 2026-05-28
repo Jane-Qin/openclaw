@@ -889,9 +889,15 @@ export async function runTui(opts: RunTuiOptions): Promise<TuiResult> {
   };
 
   const updateHeader = () => {
+    if (opts.noHeader) {
+      header.setText(
+        `${theme.header("Dataos Data Agent")}\n${theme.dim("智能数据助手，助你高效完成 SQL 开发、元数据管理与指标分析")}`,
+      );
+      return;
+    }
     const sessionLabel = formatSessionKey(currentSessionKey);
     const agentLabel = formatAgentLabel(currentAgentId);
-    const title = opts.title ?? "openclaw tui";
+    const title = opts.title ?? "data-agent tui";
     header.setText(
       theme.header(
         `${title} - ${client.connection.url} - agent ${agentLabel} - session ${sessionLabel}`,

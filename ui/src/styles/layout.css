@@ -1419,15 +1419,15 @@
   gap: 2px;
   padding: 2px;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--bg);
   flex-shrink: 0;
 }
 
 .chat-tui-toggle__btn {
   appearance: none;
   border: 1px solid transparent;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-md);
   min-height: 26px;
   padding: 0 10px;
   background: transparent;
@@ -1614,7 +1614,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 16px 12px 8px;
+  padding: 8px 16px;
 }
 
 .chatagent-sessions__brand-row {
@@ -2015,6 +2015,12 @@
   box-shadow: none;
 }
 
+oc-cli-terminal.cli .cli-terminal__xterm {
+  height: 100%;
+  width: 100%;
+  background: #ffffff;
+}
+
 oc-cli-terminal.cli .xterm,
 oc-cli-terminal.cli .xterm-screen {
   max-width: 100%;
@@ -2027,9 +2033,9 @@ oc-cli-terminal.cli .xterm-viewport {
 
 oc-cli-terminal.cli .xterm .composition-view {
   z-index: 10;
-  background: #2a2a3e;
-  color: #e0e0e0;
-  border: 1px solid #4ec9b0;
+  background: #ffffff;
+  color: #1d2129;
+  border: 1px solid #165DFF;
   padding: 0 2px;
   font-size: 14px;
   line-height: 1.2;
@@ -2141,7 +2147,7 @@ oc-cli-terminal.cli .xterm .xterm-helpers {
   right: 0;
   bottom: calc(100% + 6px);
   z-index: 50;
-  width: min(280px, 72vw);
+  width: min(220px, 72vw);
   padding: 10px 12px;
   background: var(--popover);
   color: var(--popover-foreground);
@@ -2238,4 +2244,146 @@ oc-cli-terminal.cli .xterm .xterm-helpers {
 .chatagent-compose-menu__compact-btn svg {
   width: 14px;
   height: 14px;
+}
+
+/* ===========================================
+   ChatAgent — Arco Design light-mode overrides
+   Scoped to [data-theme-mode="light"] inside .shell--chatagent
+   =========================================== */
+
+/* Arco blue accent tokens for chatagent */
+.shell--chatagent[data-theme-mode="light"],
+[data-theme-mode="light"] .shell--chatagent {
+  --chatagent-blue: #165DFF;
+  --chatagent-blue-hover: #4080FF;
+  --chatagent-blue-active: #0E42D2;
+  --chatagent-blue-subtle: #E8F3FF;
+  --chatagent-blue-border: #BEDAFF;
+  --chatagent-page-bg: #f2f3f5;
+  --chatagent-sidebar-bg: #ffffff;
+  --chatagent-header-bg: #ffffff;
+}
+
+/* Page background */
+[data-theme-mode="light"] .shell--chatagent {
+  background: var(--chatagent-page-bg, #f2f3f5);
+}
+
+/* Sidebar */
+[data-theme-mode="light"] .chatagent-sessions {
+  background: var(--chatagent-sidebar-bg, #ffffff);
+  border-right-color: #e5e6eb;
+}
+
+/* New session button — Arco blue */
+[data-theme-mode="light"] .chatagent-sessions .sidebar-new-session {
+  background: #165DFF;
+  border-color: #165DFF;
+  color: #ffffff;
+}
+
+[data-theme-mode="light"] .chatagent-sessions .sidebar-new-session:hover:not(:disabled) {
+  background: #4080FF;
+  border-color: #4080FF;
+}
+
+/* Active session item — Arco blue highlight */
+[data-theme-mode="light"] .chatagent-session-item--active {
+  background: #E8F3FF;
+  border-left: 2px solid #165DFF;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+[data-theme-mode="light"] .chatagent-session-item--active .chatagent-session-item__link {
+  color: #165DFF;
+}
+
+[data-theme-mode="light"] .chatagent-session-item__link:hover {
+  background: #f2f3f5;
+}
+
+/* Session group label */
+[data-theme-mode="light"] .chatagent-session-group__label {
+  color: #86909c;
+}
+
+/* Header */
+[data-theme-mode="light"] .chatagent-header {
+  background: var(--chatagent-header-bg, #ffffff);
+  border-bottom-color: #e5e6eb;
+}
+
+/* Header action buttons */
+[data-theme-mode="light"] .chatagent-header__actions > .btn {
+  background: #f2f3f5;
+  border-color: #e5e6eb;
+  color: #1d2129;
+}
+
+[data-theme-mode="light"] .chatagent-header__actions > .btn:hover:not(:disabled) {
+  background: #e8f3ff;
+  border-color: #bedaff;
+  color: #165DFF;
+}
+
+/* Header Chat/CLI mode toggle — active tab Arco blue */
+[data-theme-mode="light"] .chatagent-header__mode-btn--active {
+  color: #165DFF;
+  border-bottom: 2px solid #165DFF;
+}
+
+/* Search input in sidebar */
+[data-theme-mode="light"] .chatagent-sessions__search-input {
+  background: #f2f3f5;
+  border-color: #e5e6eb;
+  color: #1d2129;
+}
+
+[data-theme-mode="light"] .chatagent-sessions__search-input:focus {
+  border-color: #165DFF;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px #e8f3ff;
+}
+
+/* Sidebar footer border */
+[data-theme-mode="light"] .chatagent-sessions__footer {
+  border-top-color: #e5e6eb;
+}
+
+/* Brand text */
+[data-theme-mode="light"] .chatagent-sessions__brand {
+  color: #1d2129;
+}
+
+[data-theme-mode="light"] .chatagent-sessions__version {
+  color: #86909c;
+}
+
+/* Compose toolbar model select */
+[data-theme-mode="light"] .chat--chatagent .agent-chat__toolbar-left .chat-controls__model select {
+  background-color: #f2f3f5;
+  border-color: #e5e6eb;
+  color: #1d2129;
+}
+
+/* Compose menu trigger */
+[data-theme-mode="light"] .chatagent-compose-menu__trigger.agent-chat__input-btn {
+  background: #f2f3f5;
+  border-color: #e5e6eb;
+}
+
+[data-theme-mode="light"] .chatagent-compose-menu__trigger.agent-chat__input-btn:hover:not(:disabled) {
+  background: #e8f3ff;
+  color: #165DFF;
+}
+
+/* Ring core background */
+[data-theme-mode="light"] .chatagent-compose-menu__ring-core {
+  background: #ffffff;
+}
+
+/* TUI pane border */
+[data-theme-mode="light"] .chatagent-pane > oc-cli-terminal.cli,
+[data-theme-mode="light"] .chatagent-body > oc-cli-terminal.cli {
+  border: 1px solid #e5e6eb;
 }

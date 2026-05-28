@@ -1095,7 +1095,7 @@ export const en: TranslationMap = {
     welcome: {
       title: "Hello, I'm {name}",
       ready: "Ready to assist",
-      subtitle: "Pick a scenario card below, or describe your question in the input box",
+      subtitle: "智能数据助手，助你高效完成 SQL 开发、元数据管理与指标分析",
     },
     sessions: {
       empty: "No sessions",

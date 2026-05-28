@@ -141,6 +141,8 @@ export class OcCliTerminal extends LitElement {
   private onDataDisposable?: { dispose(): void };
   private lastPtyUrl = "";
   private connectScheduled = false;
+  private connectAgain = false;
+  private connectGeneration = 0;
   private compositionGuard = new CompositionGuard();
 
   // No shadow DOM — xterm manages its own DOM
@@ -163,32 +165,68 @@ export class OcCliTerminal extends LitElement {
         this.resumeVisible();
       }
     }
-    if (
-      (changed.has("gatewayUrl") || changed.has("token") || changed.has("sessionKey")) &&
-      this.term
-    ) {
-      if (changed.has("sessionKey") || changed.has("gatewayUrl") || changed.has("token")) {
-        this.lastPtyUrl = "";
+    if (!this.term) {
+      return;
+    }
+    if (changed.has("sessionKey")) {
+      // Skip the initial property bind; initTerm() already schedules the first connect.
+      if (changed.get("sessionKey") !== undefined) {
+        this.handleSessionKeyChange();
       }
-      this.scheduleConnectPty();
+      return;
+    }
+    if (changed.has("gatewayUrl") || changed.has("token")) {
+      this.lastPtyUrl = "";
+      this.scheduleConnectPty({ force: true });
     }
   }
 
-  private scheduleConnectPty() {
+  private handleSessionKeyChange() {
+    this.closePtyConnection();
+    this.lastPtyUrl = "";
+    this.connectScheduled = false;
+    this.term?.clear();
+    this.scheduleConnectPty({ force: true });
+  }
+
+  private scheduleConnectPty(opts?: { force?: boolean }) {
     if (this.connectScheduled) {
+      if (opts?.force) {
+        this.connectAgain = true;
+      }
       return;
     }
     this.connectScheduled = true;
     queueMicrotask(() => {
       this.connectScheduled = false;
+      if (this.connectAgain) {
+        this.connectAgain = false;
+        this.scheduleConnectPty(opts);
+        return;
+      }
       if (!this.term || !this.gatewayUrl || !this.sessionKey || !this.token.trim()) {
         return;
       }
-      if (!this.active && !this.ws) {
+      // Session switch should reconnect even when the TUI pane is hidden.
+      if (!opts?.force && !this.active && !this.ws) {
         return;
       }
       this.connectPty();
     });
+  }
+
+  private closePtyConnection() {
+    this.connectGeneration += 1;
+    this.onDataDisposable?.dispose();
+    this.onDataDisposable = undefined;
+    if (!this.ws) {
+      return;
+    }
+    const ws = this.ws;
+    this.ws = undefined;
+    try {
+      ws.close();
+    } catch { /* ignore */ }
   }
 
   private resumeVisible() {
@@ -236,10 +274,16 @@ export class OcCliTerminal extends LitElement {
       fontFamily: "'Cascadia Code','Fira Code','JetBrains Mono',Menlo,Monaco,monospace",
       scrollOnUserInput: false,
       theme: {
-        background: "#1a1a2e",
-        foreground: "#e0e0e0",
-        cursor: "#4ec9b0",
-        selectionBackground: "#264f78",
+        background: "#ffffff",
+        foreground: "#1d2129",
+        cursor: "#165DFF",
+        cursorAccent: "#ffffff",
+        selectionBackground: "#c7e0ff",
+        selectionForeground: "#1d2129",
+        black: "#1d2129",
+        brightBlack: "#86909c",
+        white: "#f2f3f5",
+        brightWhite: "#ffffff",
       },
     });
 
@@ -247,9 +291,6 @@ export class OcCliTerminal extends LitElement {
     t.loadAddon(fit);
     t.open(el as HTMLElement);
     fit.fit();
-
-    t.writeln("\x1b[1mDataWorks Agent — TUI\x1b[0m");
-    t.writeln("Connecting to PTY bridge...\r\n");
 
     const resetHorizontalScroll = () => this.resetHorizontalScroll();
     const resetHorizontalScrollSoon = () => {
@@ -349,23 +390,17 @@ export class OcCliTerminal extends LitElement {
     if (ptyUrl === this.lastPtyUrl && this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
-    if (this.ws?.readyState === WebSocket.CONNECTING) {
-      return;
-    }
     this.lastPtyUrl = ptyUrl;
+    this.closePtyConnection();
 
-    // Close existing connection
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch { /* ignore */ }
-      this.ws = undefined;
-    }
-
+    const generation = this.connectGeneration;
     const ws = new WebSocket(ptyUrl);
     this.ws = ws;
 
     ws.onopen = () => {
+      if (generation !== this.connectGeneration || ws !== this.ws) {
+        return;
+      }
       if (this.active) {
         this.term?.write("\x1b[32m● PTY connected\x1b[0m\r\n");
         this.sendResize();
@@ -374,7 +409,9 @@ export class OcCliTerminal extends LitElement {
     };
 
     ws.onmessage = (evt) => {
-      // PTY output → xterm display
+      if (generation !== this.connectGeneration || ws !== this.ws) {
+        return;
+      }
       const data = typeof evt.data === "string" ? evt.data : "";
       if (data && this.term) {
         this.term.write(data);
@@ -382,23 +419,25 @@ export class OcCliTerminal extends LitElement {
     };
 
     ws.onclose = () => {
+      if (generation !== this.connectGeneration || ws !== this.ws) {
+        return;
+      }
+      this.ws = undefined;
       this.term?.write("\r\n\x1b[31m● PTY disconnected\x1b[0m\r\n");
     };
 
     ws.onerror = () => {
+      if (generation !== this.connectGeneration || ws !== this.ws) {
+        return;
+      }
       this.term?.write("\r\n\x1b[31m● PTY connection error\x1b[0m\r\n");
     };
 
-    // xterm keyboard input → PTY stdin
-    // Use CompositionGuard to block data during IME composition.
-    // The guard combines two signals: composition-view.active class
-    // (xterm.js internal state) and input event inputType detection.
-    this.onDataDisposable?.dispose();
     this.onDataDisposable = this.term?.onData((data) => {
       if (this.compositionGuard.isComposing()) {
         return;
       }
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN && ws === this.ws) {
         ws.send(data);
       }
     });
@@ -433,10 +472,7 @@ export class OcCliTerminal extends LitElement {
   }
 
   override render() {
-    return html`<div
-      id="cli-term"
-      style="height:100%;width:100%;background:#1a1a2e"
-    ></div>`;
+    return html`<div id="cli-term" class="cli-terminal__xterm"></div>`;
   }
 }
 

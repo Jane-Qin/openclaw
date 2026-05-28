@@ -1132,10 +1132,6 @@ export function renderChat(props: ChatProps) {
         ${isEmpty && !vs.searchOpen
           ? isChatAgentLayout
             ? renderChatAgentWelcomeState({
-                assistantName: props.assistantName,
-                assistantAvatar: props.assistantAvatar,
-                assistantAvatarUrl: props.assistantAvatarUrl,
-                basePath: props.basePath,
                 onSuggestionSelect: (cardDesc) => {
                   setChatAgentComposerSuggestionPlaceholder(props.sessionKey, cardDesc);
                   applyComposerSuggestionPlaceholder(cardDesc);
@@ -1191,6 +1187,7 @@ export function renderChat(props: ChatProps) {
                 assistantIdentity,
                 props.basePath,
                 props.assistantAttachmentAuthToken ?? null,
+                isChatAgentLayout,
               );
             }
             if (item.kind === "stream") {
@@ -1201,6 +1198,9 @@ export function renderChat(props: ChatProps) {
                 assistantIdentity,
                 props.basePath,
                 props.assistantAttachmentAuthToken ?? null,
+                isChatAgentLayout
+                  ? { hideSenderNames: true, unifiedIcons: true }
+                  : undefined,
               );
             }
             if (item.kind === "group") {
@@ -1211,6 +1211,8 @@ export function renderChat(props: ChatProps) {
                 onOpenSidebar: props.onOpenSidebar,
                 showReasoning,
                 showToolCalls: props.showToolCalls,
+                hideSenderNames: isChatAgentLayout,
+                unifiedIcons: isChatAgentLayout,
                 autoExpandToolCalls: Boolean(props.autoExpandToolCalls),
                 isToolMessageExpanded: (messageId: string) =>
                   expandedToolCards.get(messageId) ?? false,

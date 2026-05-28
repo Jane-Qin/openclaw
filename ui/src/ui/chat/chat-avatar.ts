@@ -18,6 +18,7 @@ export function renderChatAvatar(
   user?: { name?: string | null; avatar?: string | null },
   basePath?: string,
   authToken?: string | null,
+  unifiedIcons = false,
 ) {
   const normalized = normalizeRoleForGrouping(role);
   const assistantName = assistant?.name?.trim() || "Assistant";
@@ -27,20 +28,29 @@ export function renderChatAvatar(
   const userName = resolveLocalUserName(user);
   const userAvatarUrl = resolveLocalUserAvatarUrl(user);
   const userAvatarText = resolveLocalUserAvatarText(user);
+
+  // Unified assistant icon: robot head
+  const assistantIcon = html`
+    <svg viewBox="0 0 1024 1024" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path
+        d="M298.666667 810.666667h426.666666v42.666666a42.666667 42.666667 0 0 1-42.666666 42.666667H341.333333a42.666667 42.666667 0 0 1-42.666666-42.666667v-42.666666z m405.333333-640A192 192 0 0 1 896 362.666667v213.333333a192 192 0 0 1-192 192h-384A192 192 0 0 1 128 576v-213.333333A192 192 0 0 1 320 170.666667h384z m0 72.533333h-384a119.466667 119.466667 0 0 0-119.466667 119.466667v213.333333a119.466667 119.466667 0 0 0 119.466667 119.466667h384a119.466667 119.466667 0 0 0 119.466667-119.466667v-213.333333a119.466667 119.466667 0 0 0-119.466667-119.466667zM640 384a42.666667 42.666667 0 0 1 42.666667 42.666667v85.333333a42.666667 42.666667 0 0 1-85.333334 0v-85.333333a42.666667 42.666667 0 0 1 42.666667-42.666667zM384 384a42.666667 42.666667 0 0 1 42.666667 42.666667v85.333333a42.666667 42.666667 0 1 1-85.333334 0v-85.333333a42.666667 42.666667 0 0 1 42.666667-42.666667z m576-42.666667a42.666667 42.666667 0 0 1 42.666667 42.666667v170.666667a42.666667 42.666667 0 0 1-85.333334 0V384a42.666667 42.666667 0 0 1 42.666667-42.666667z m-896 0a42.666667 42.666667 0 0 1 42.666667 42.666667v170.666667a42.666667 42.666667 0 1 1-85.333334 0V384a42.666667 42.666667 0 0 1 42.666667-42.666667z"
+      />
+    </svg>
+  `;
+
+  // Unified user icon: simple person silhouette
+  const userIcon = html`
+    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M20 21a8 8 0 1 0-16 0" />
+    </svg>
+  `;
+
   const initial =
     normalized === "user"
-      ? html`
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M20 21a8 8 0 1 0-16 0" />
-          </svg>
-        `
+      ? userIcon
       : normalized === "assistant"
-        ? html`
-            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16l-6.4 5.2L8 14 2 9.2h7.6z" />
-            </svg>
-          `
+        ? assistantIcon
         : normalized === "tool"
           ? html`
               <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
@@ -73,17 +83,17 @@ export function renderChatAvatar(
           ? "tool"
           : "other";
 
-  if (normalized === "user" && userAvatarUrl) {
+  if (!unifiedIcons && normalized === "user" && userAvatarUrl) {
     return html`<img class="chat-avatar ${className}" src="${userAvatarUrl}" alt="${userName}" />`;
   }
 
-  if (normalized === "user" && userAvatarText) {
+  if (!unifiedIcons && normalized === "user" && userAvatarText) {
     return html`<div class="chat-avatar ${className}" aria-label="${userName}">
       ${userAvatarText}
     </div>`;
   }
 
-  if (assistantAvatar && normalized === "assistant") {
+  if (!unifiedIcons && assistantAvatar && normalized === "assistant") {
     if (isAvatarUrl(assistantAvatar)) {
       if (authToken?.trim() && assistantAvatar.startsWith("/")) {
         return html`<img
@@ -110,7 +120,7 @@ export function renderChatAvatar(
     />`;
   }
 
-  if (normalized === "assistant") {
+  if (!unifiedIcons && normalized === "assistant") {
     return html`<img
       class="chat-avatar ${className} chat-avatar--logo"
       src="${assistantFallbackAvatar}"
@@ -118,7 +128,7 @@ export function renderChatAvatar(
     />`;
   }
 
-  return html`<div class="chat-avatar ${className}">${initial}</div>`;
+  return html`<div class="chat-avatar ${className}" aria-hidden="true">${initial}</div>`;
 }
 
 function isAvatarUrl(value: string): boolean {

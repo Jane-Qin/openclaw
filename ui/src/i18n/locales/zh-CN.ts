@@ -1070,7 +1070,7 @@ export const zh_CN: TranslationMap = {
     welcome: {
       title: "你好，我是 {name}",
       ready: "准备就绪",
-      subtitle: "选择下方场景卡片，或在输入框中描述你的需求",
+      subtitle: "智能数据助手，助你高效完成 SQL 开发、元数据管理与指标分析",
     },
     sessions: {
       empty: "暂无会话",

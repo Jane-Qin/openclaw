@@ -32,8 +32,7 @@ import type { AppViewState } from "./app-view-state.ts";
 import { resolveControlUiAuthToken } from "./control-ui-auth.ts";
 import { renderChatAgentComposeExtras } from "./chatagent/compose-extras.ts";
 import {
-  renderChatAgentSessionLiveIndicator,
-  renderChatAgentSessionStatusDot,
+  renderChatAgentSessionLiveIndicator
 } from "./chatagent/session-status-dot.ts";
 import { filterChatAgentSessionGroups } from "./chatagent/sessions-panel.ts";
 import { reconcileChatRunLifecycle } from "./chat/run-lifecycle.ts";
@@ -318,6 +317,7 @@ function renderChatAgentPage(state: AppViewState, requestHostUpdate?: () => void
 
   return html`
     <div
+      data-theme-mode="light"
       class="shell shell--chatagent ${sessionsCollapsed ? "shell--chatagent-collapsed" : ""} ${sessionsDrawerOpen
         ? "shell--chatagent-drawer-open"
         : ""}"
@@ -336,13 +336,8 @@ function renderChatAgentPage(state: AppViewState, requestHostUpdate?: () => void
             ? nothing
             : html`
                 <div class="chatagent-sessions__brand-row">
-                  <span class="chatagent-sessions__brand">OpenClaw</span>
-                  ${version
-                    ? html`
-                        <span class="chatagent-sessions__version">v${version}</span>
-                        ${renderSidebarConnectionStatus(state)}
-                      `
-                    : renderSidebarConnectionStatus(state)}
+                  ${ renderSidebarConnectionStatus(state)}
+                  <span class="chatagent-sessions__brand">Data Agent</span>
                 </div>
               `}
           <button
@@ -710,7 +705,6 @@ function renderChatAgentSessionGroups(state: AppViewState) {
                   }
                 }}
               >
-                ${renderChatAgentSessionStatusDot({ active })}
                 <span class="chatagent-session-item__name">${option.label}</span>
               </a>
               <div class="chatagent-session-item__actions">

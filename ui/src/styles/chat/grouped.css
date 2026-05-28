@@ -642,3 +642,25 @@ details.msg-meta:not([open]) .msg-meta__details {
     display: none;
   }
 }
+
+/* ChatAgent: hide sender names (You / agent name) */
+.chat--chatagent .chat-sender-name {
+  display: none;
+}
+
+/* ChatAgent: unified avatar icons (robot + user silhouette) */
+.chat--chatagent .chat-avatar.assistant {
+  background: #f2f3f5;
+  color: #4e5969;
+  border-color: #e5e6eb;
+}
+
+.chat--chatagent .chat-avatar.user {
+  background: #e8f3ff;
+  color: #165dff;
+  border-color: #bedaff;
+}
+
+.chat--chatagent img.chat-avatar {
+  display: none;
+}
